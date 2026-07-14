@@ -1,5 +1,6 @@
 """Timebox API — app factory + lifespan. Single user, zero surveillance."""
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
@@ -20,20 +21,36 @@ _log = get_logger(__name__)
 _DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 
+_PURGE_INTERVAL_SECONDS = 24 * 60 * 60
+
+
+async def _purge_daily() -> None:
+    """The pg_cron stand-in: enforce the 14-day hard-purge contract daily."""
+    while True:
+        async with session_factory() as db:
+            await run_purge(db)
+        await asyncio.sleep(_PURGE_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     await init_models()
-    async with session_factory() as db:
-        await run_purge(db)
+    purge_task = asyncio.create_task(_purge_daily())
     _log.info("timebox-api ready")
     yield
+    purge_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await purge_task
     await app.state.llm_provider.close()
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Timebox API", version="0.1.0", lifespan=lifespan)
-    app.state.session_store = InMemorySessionStore(ttl_hours=settings.session_ttl_hours)
+    app.state.session_store = InMemorySessionStore(
+        ttl_hours=settings.session_ttl_hours,
+        max_lifetime_hours=settings.session_max_lifetime_hours,
+    )
     app.state.llm_provider = build_default_provider()
 
     app.add_middleware(SessionAuthMiddleware, store=app.state.session_store)

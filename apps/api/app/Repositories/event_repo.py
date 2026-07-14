@@ -24,6 +24,17 @@ async def list_in_range(
     return list(result.scalars())
 
 
+_NON_BLOCKING_STATUSES = ("cancelled", "skipped")
+
+
+async def list_busy_in_range(
+    session: AsyncSession, user_id: str, start_at: datetime, end_at: datetime
+) -> list[Event]:
+    """Events that actually occupy time — cancelled/skipped ones don't block slots."""
+    events = await list_in_range(session, user_id, start_at, end_at)
+    return [event for event in events if event.status not in _NON_BLOCKING_STATUSES]
+
+
 async def list_overlapping(
     session: AsyncSession,
     user_id: str,

@@ -92,3 +92,35 @@ async def test_end_before_start_rejected(unlocked) -> None:
     bad = _event_payload(start_at="2026-07-14T10:00:00Z", end_at="2026-07-14T09:00:00Z")
     res = await client.post("/events", json=bad, headers=headers)
     assert res.status_code == 422
+
+
+async def test_canvas_type_reverts_when_peer_deleted(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    homework = await client.post("/events", json=_event_payload(title="Homework"), headers=headers)
+    laundry = await client.post(
+        "/events",
+        json=_event_payload(title="Laundry", event_type="passive", attention_class="passive"),
+        headers=headers,
+    )
+    assert laundry.json()["canvas_event_type"] == "focus_passive"
+
+    await client.delete(f"/events/{homework.json()['id']}", headers=headers)
+    refreshed = await client.get(f"/events/{laundry.json()['id']}", headers=headers)
+    assert refreshed.json()["canvas_event_type"] == "passive_multi"
+
+
+async def test_canvas_type_reverts_when_peer_moves_away(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    homework = await client.post("/events", json=_event_payload(title="Homework"), headers=headers)
+    laundry = await client.post(
+        "/events",
+        json=_event_payload(title="Laundry", event_type="passive", attention_class="passive"),
+        headers=headers,
+    )
+    await client.patch(
+        f"/events/{homework.json()['id']}",
+        json={"start_at": "2026-07-16T09:00:00Z", "end_at": "2026-07-16T10:30:00Z"},
+        headers=headers,
+    )
+    refreshed = await client.get(f"/events/{laundry.json()['id']}", headers=headers)
+    assert refreshed.json()["canvas_event_type"] == "passive_multi"

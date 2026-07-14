@@ -77,3 +77,18 @@ async def test_apply_creates_chore_events(unlocked) -> None:
     chore_events = [e for e in events.json() if e["event_type"] == "chore"]
     assert len(chore_events) == occurrence_count
     assert all(e["title"] == "Water plants" for e in chore_events)
+
+
+async def test_chore_patch_rejects_bad_time_and_days(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    chore_id = await _create_chore(client, headers, "Mop floors")
+
+    bad_time = await client.patch(
+        f"/chores/{chore_id}", json={"preferred_time_start": "9am"}, headers=headers
+    )
+    assert bad_time.status_code == 422
+
+    bad_day = await client.patch(
+        f"/chores/{chore_id}", json={"avoid_days": [7]}, headers=headers
+    )
+    assert bad_day.status_code == 422

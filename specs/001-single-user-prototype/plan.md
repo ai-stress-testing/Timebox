@@ -91,6 +91,14 @@ Service layer snapshots the DB, runs the pipeline, persists run + occurrences.
   concatenated into the system prompt) → Ollama → parse slot proposal →
   persist `ai_sessions` row (hash, model, duration).
 
+## Known prototype deviations (post-review)
+
+- **UTC-only scheduling windows:** the Monte Carlo day boundaries, default
+  08:00–20:00 chore window, and preferred/avoid weekday matching all operate
+  in UTC; the web app renders local time. Users far from UTC get shifted
+  windows. Fix planned for spec 002: a `timezone` field in user preferences
+  applied when snapshotting the schedule input.
+
 ## Cross-cutting
 
 - Config: pydantic-settings, `TIMEBOX_` env prefix; SQLite default

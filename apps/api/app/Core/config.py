@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     ollama_timeout_seconds: float = Field(default=120.0, le=120.0)
 
     session_ttl_hours: int = 12
+    session_max_lifetime_hours: int = 24
     prompt_max_chars: int = 8000
     purge_after_days: int = 14
 

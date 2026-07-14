@@ -51,22 +51,28 @@ def to_out(event: Event, data_key: bytes) -> EventOut:
     )
 
 
-async def _reassign_canvas_types(session: AsyncSession, event: Event) -> None:
-    """Recompute canvas_event_type for the event and everything it overlaps."""
-    overlapping = await event_repo.list_overlapping(
+async def _reassign_one(session: AsyncSession, event: Event) -> None:
+    peers = await event_repo.list_overlapping(
         session, event.user_id, event.start_at, event.end_at, event.id
     )
-    peer_classes = frozenset(AttentionClass(peer.attention_class) for peer in overlapping)
+    peer_classes = frozenset(AttentionClass(peer.attention_class) for peer in peers)
     own_class = AttentionClass(event.attention_class)
     event.canvas_event_type = assign_canvas_type(own_class, peer_classes).value
-    for peer in overlapping:
-        peer_peers = await event_repo.list_overlapping(
-            session, peer.user_id, peer.start_at, peer.end_at, peer.id
-        )
-        classes = frozenset(AttentionClass(p.attention_class) for p in peer_peers)
-        peer.canvas_event_type = assign_canvas_type(
-            AttentionClass(peer.attention_class), classes
-        ).value
+
+
+async def _reassign_range(
+    session: AsyncSession, user_id: str, start_at: datetime, end_at: datetime
+) -> None:
+    """Recompute canvas_event_type for every live event overlapping a range."""
+    affected = await event_repo.list_overlapping(session, user_id, start_at, end_at, None)
+    for peer in affected:
+        await _reassign_one(session, peer)
+
+
+async def _reassign_canvas_types(session: AsyncSession, event: Event) -> None:
+    """Recompute the event's canvas type and its current overlap peers'."""
+    await _reassign_one(session, event)
+    await _reassign_range(session, event.user_id, event.start_at, event.end_at)
 
 
 async def _resolve_calendar_id(
@@ -82,7 +88,11 @@ async def _resolve_calendar_id(
 
 
 async def create_event(
-    session: AsyncSession, user_id: str, data_key: bytes, payload: EventCreate
+    session: AsyncSession,
+    user_id: str,
+    data_key: bytes,
+    payload: EventCreate,
+    commit: bool = True,
 ) -> EventOut:
     calendar_id = await _resolve_calendar_id(session, user_id, data_key, payload.calendar_id)
     event = Event(
@@ -105,7 +115,8 @@ async def create_event(
     event_repo.add_event(session, event)
     await session.flush()
     await _reassign_canvas_types(session, event)
-    await session.commit()
+    if commit:
+        await session.commit()
     return to_out(event, data_key)
 
 
@@ -157,6 +168,7 @@ async def patch_event(
     event = await event_repo.get_event(session, user_id, event_id)
     if event is None:
         raise EventError(404, "event not found")
+    old_start, old_end = event.start_at, event.end_at
     if payload.calendar_id is not None:
         event.calendar_id = await _resolve_calendar_id(
             session, user_id, data_key, payload.calendar_id
@@ -165,7 +177,9 @@ async def patch_event(
     _apply_encrypted_fields(event, payload, data_key)
     if event.end_at <= event.start_at:
         raise EventError(400, "end_at must be after start_at")
+    await session.flush()
     await _reassign_canvas_types(session, event)
+    await _reassign_range(session, user_id, old_start, old_end)
     await session.commit()
     return to_out(event, data_key)
 
@@ -174,5 +188,8 @@ async def delete_event(session: AsyncSession, user_id: str, event_id: str) -> No
     event = await event_repo.get_event(session, user_id, event_id)
     if event is None:
         raise EventError(404, "event not found")
+    old_start, old_end = event.start_at, event.end_at
     event.deleted_at = utc_now()
+    await session.flush()
+    await _reassign_range(session, user_id, old_start, old_end)
     await session.commit()

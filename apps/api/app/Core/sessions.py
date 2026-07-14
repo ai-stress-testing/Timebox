@@ -16,6 +16,7 @@ class SessionEntry:
     user_id: str
     data_key: bytes
     expires_at: datetime
+    hard_expires_at: datetime
 
 
 class SessionStore(Protocol):
@@ -30,14 +31,17 @@ def _now() -> datetime:
 
 
 class InMemorySessionStore:
-    def __init__(self, ttl_hours: int) -> None:
+    def __init__(self, ttl_hours: int, max_lifetime_hours: int = 24) -> None:
         self._ttl = timedelta(hours=ttl_hours)
+        self._max_lifetime = timedelta(hours=max_lifetime_hours)
         self._entries: dict[str, SessionEntry] = {}
 
     def create(self, user_id: str, data_key: bytes) -> SessionEntry:
         self._prune()
         token = secrets.token_urlsafe(32)
-        entry = SessionEntry(token, user_id, data_key, _now() + self._ttl)
+        hard_deadline = _now() + self._max_lifetime
+        expires_at = min(_now() + self._ttl, hard_deadline)
+        entry = SessionEntry(token, user_id, data_key, expires_at, hard_deadline)
         self._entries = {**self._entries, token: entry}
         return entry
 
@@ -48,7 +52,11 @@ class InMemorySessionStore:
             self.revoke(token)
         if not is_live or entry is None:
             return None
-        refreshed = replace(entry, expires_at=_now() + self._ttl)
+        # Sliding TTL, but never past the absolute lifetime: background
+        # polling (e.g. the AI health check) must not keep a leaked token —
+        # and the in-memory data key — alive forever.
+        extended = min(_now() + self._ttl, entry.hard_expires_at)
+        refreshed = replace(entry, expires_at=extended)
         self._entries = {**self._entries, token: refreshed}
         return refreshed
 

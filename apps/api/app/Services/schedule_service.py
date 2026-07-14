@@ -76,7 +76,7 @@ async def _snapshot(
 ) -> tuple[tuple[ChoreSpec, ...], tuple[BusyInterval, ...]]:
     chores = await chore_repo.list_chores(session, user_id, active_only=True)
     window_end = window_start + timedelta(days=window_days)
-    events = await event_repo.list_in_range(session, user_id, window_start, window_end)
+    events = await event_repo.list_busy_in_range(session, user_id, window_start, window_end)
     specs = tuple(_to_spec(chore, window_start) for chore in chores)
     busy = tuple(BusyInterval(event.start_at, event.end_at) for event in events)
     return specs, busy
@@ -221,9 +221,11 @@ async def apply_run(
                 start_at=occ.proposed_start_at,
                 end_at=occ.proposed_end_at,
             ),
+            commit=False,
         )
         occ.event_id = event_out.id
         occ.status = OccurrenceStatus.scheduled.value
         created += 1
+    # Single commit: a failure mid-loop rolls the whole apply back (idempotent retry).
     await session.commit()
     return ApplyResponse(events_created=created)

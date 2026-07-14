@@ -88,7 +88,7 @@ async def propose_timebox(
 ) -> TimeboxResponse:
     clean_title = sanitise_prompt(payload.task_title)
     clean_notes = sanitise_prompt(payload.notes) if payload.notes else None
-    events = await event_repo.list_in_range(
+    events = await event_repo.list_busy_in_range(
         session, user_id, payload.window_start, payload.window_end
     )
     busy_pairs = [(e.start_at, e.end_at) for e in events]

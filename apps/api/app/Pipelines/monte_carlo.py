@@ -96,8 +96,16 @@ def _sample_day(rng: random.Random, base_offset: int, chore: ChoreSpec, inp: Sch
 
 
 def _sample_start_minute(rng: random.Random, chore: ChoreSpec) -> int:
-    lo = chore.preferred_start_minute or _DEFAULT_START_MINUTE
-    hi = chore.preferred_end_minute or _DEFAULT_END_MINUTE
+    lo = (
+        chore.preferred_start_minute
+        if chore.preferred_start_minute is not None
+        else _DEFAULT_START_MINUTE
+    )
+    hi = (
+        chore.preferred_end_minute
+        if chore.preferred_end_minute is not None
+        else _DEFAULT_END_MINUTE
+    )
     hi_bound = max(lo, hi - chore.estimated_minutes)
     grid_steps = max(1, (hi_bound - lo) // _SLOT_GRID_MINUTES + 1)
     return lo + rng.randrange(grid_steps) * _SLOT_GRID_MINUTES
@@ -194,12 +202,14 @@ def _find_move(
         candidates = [i for i, p in enumerate(placements) if p.day_offset == day]
         by_priority = sorted(candidates, key=lambda i: placements[i].chore.priority)
         for index in by_priority:
-            chore = placements[index].chore
+            placement = placements[index]
             for target in underloaded:
                 near_enough = abs(target - day) <= 1
                 target_day = inp.window_start + timedelta(days=target)
-                allowed = _weekday_sun0(target_day) not in chore.avoid_days
-                if near_enough and allowed:
+                allowed = _weekday_sun0(target_day) not in placement.chore.avoid_days
+                shifted = _shift_day(placement, target, inp)
+                conflict_free = not _conflicts(shifted.start_at, shifted.end_at, inp.busy)
+                if near_enough and allowed and conflict_free:
                     return index, target
     return None
 

@@ -65,6 +65,23 @@ class ChorePatch(ApiModel):
     preferred_time_end: str | None = None
     is_active: bool | None = None
 
+    @field_validator("preferred_days", "avoid_days")
+    @classmethod
+    def check_days(cls, days: list[int] | None) -> list[int] | None:
+        if days is None:
+            return None
+        invalid = [d for d in days if d not in _DAY_RANGE]
+        if invalid:
+            raise ValueError("days must be 0 (Sun) through 6 (Sat)")
+        return sorted(set(days))
+
+    @field_validator("preferred_time_start", "preferred_time_end")
+    @classmethod
+    def check_time(cls, value: str | None) -> str | None:
+        if value is not None and not TIME_HHMM.match(value):
+            raise ValueError("time must be HH:MM (24h)")
+        return value
+
 
 class ChoreOut(ApiModel):
     id: str
