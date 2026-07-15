@@ -210,6 +210,126 @@ async def test_recurring_event_expands_within_week(unlocked) -> None:
         assert occ["end_at"].endswith("T09:30:00Z")
 
 
+def _recurring_payload(**overrides: object) -> dict[str, object]:
+    return _event_payload(
+        title="Standup",
+        start_at="2026-07-13T09:00:00Z",  # Monday
+        end_at="2026-07-13T09:30:00Z",
+        is_recurring=True,
+        recurrence_weekdays=[1, 3, 5],  # Mon, Wed, Fri
+        **overrides,
+    )
+
+
+async def test_delete_scope_occurrence_removes_only_that_date(unlocked) -> None:
+    """(a) scope=occurrence on the Wed date -> Wed gone, Mon+Fri remain."""
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    master_id = created.json()["id"]
+
+    deleted = await client.delete(
+        f"/events/{master_id}",
+        params={"scope": "occurrence", "occurrence_date": "2026-07-15"},
+        headers=headers,
+    )
+    assert deleted.status_code == 204
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    dates = sorted(occ["occurrence_date"] for occ in listed.json())
+    assert dates == ["2026-07-13", "2026-07-17"]
+
+
+async def test_delete_scope_following_cuts_series(unlocked) -> None:
+    """(b) scope=following on the Wed date -> Mon remains, Wed+Fri gone; the
+    master's recurrence_end moves to just before the cutoff date."""
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    master = created.json()
+    assert master["recurrence_end"] is None
+
+    deleted = await client.delete(
+        f"/events/{master['id']}",
+        params={"scope": "following", "occurrence_date": "2026-07-15"},
+        headers=headers,
+    )
+    assert deleted.status_code == 204
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    dates = sorted(occ["occurrence_date"] for occ in listed.json())
+    assert dates == ["2026-07-13"]
+
+    refreshed = await client.get(f"/events/{master['id']}", headers=headers)
+    assert refreshed.json()["recurrence_end"] == "2026-07-14T23:59:59Z"
+
+
+async def test_delete_scope_following_from_first_occurrence_removes_series(unlocked) -> None:
+    """Cutting "following" from the very first occurrence leaves nothing to
+    keep, so the whole master is soft-deleted instead of a no-op cutoff."""
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    master_id = created.json()["id"]
+
+    deleted = await client.delete(
+        f"/events/{master_id}",
+        params={"scope": "following", "occurrence_date": "2026-07-13"},
+        headers=headers,
+    )
+    assert deleted.status_code == 204
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    assert listed.json() == []
+    gone = await client.get(f"/events/{master_id}", headers=headers)
+    assert gone.status_code == 404
+
+
+async def test_delete_scope_all_removes_whole_series(unlocked) -> None:
+    """(c) scope=all (default) -> whole series gone."""
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    master_id = created.json()["id"]
+
+    deleted = await client.delete(f"/events/{master_id}", headers=headers)
+    assert deleted.status_code == 204
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    assert listed.json() == []
+
+
+async def test_delete_non_recurring_event_regression(unlocked) -> None:
+    """(d) deleting a non-recurring event still works as before."""
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_event_payload(), headers=headers)
+    event_id = created.json()["id"]
+
+    deleted = await client.delete(f"/events/{event_id}", headers=headers)
+    assert deleted.status_code == 204
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    assert listed.json() == []
+
+
+async def test_delete_occurrence_scope_requires_occurrence_date(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    master_id = created.json()["id"]
+
+    bad = await client.delete(
+        f"/events/{master_id}", params={"scope": "occurrence"}, headers=headers
+    )
+    assert bad.status_code == 400
+
+
+async def test_delete_following_scope_requires_occurrence_date(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    master_id = created.json()["id"]
+
+    bad = await client.delete(
+        f"/events/{master_id}", params={"scope": "following"}, headers=headers
+    )
+    assert bad.status_code == 400
+
+
 async def test_recurring_event_listing_is_deterministic(unlocked) -> None:
     client, _keyfile, headers = unlocked
     await client.post(

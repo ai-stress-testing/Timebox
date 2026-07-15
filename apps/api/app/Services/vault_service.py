@@ -13,6 +13,7 @@ from app.Models import (
     ChoreDefinition,
     ChoreOccurrence,
     Event,
+    EventException,
     PomodoroSession,
     ResidualPrompt,
     ScheduleRun,
@@ -25,6 +26,7 @@ from app.Schemas.vault import Keyfile
 _SOFT_DELETE_MODELS = (
     Calendar,
     Event,
+    EventException,
     ChoreDefinition,
     ScheduleRun,
     ChoreOccurrence,

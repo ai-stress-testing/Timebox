@@ -1,15 +1,18 @@
 """Event service — CRUD with encryption at rest and canvas-type auto-assignment."""
 import json
-from datetime import datetime, timezone
+from collections.abc import Awaitable, Callable
+from datetime import date, datetime, time, timedelta, timezone
+from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.Core import crypto
+from app.Core.patterns import DATE_YMD
 from app.dispatch_maps.canvas_type import assign_canvas_type
 from app.Models.base import utc_now
 from app.Models.event import Event
 from app.Pipelines.recurrence import Occurrence, expand_occurrences
-from app.Repositories import calendar_repo, event_repo
+from app.Repositories import calendar_repo, event_exception_repo, event_repo
 from app.Schemas.base import (
     AttentionClass,
     CanvasEventType,
@@ -18,6 +21,8 @@ from app.Schemas.base import (
 )
 from app.Schemas.event import EventCreate, EventOut, EventPatch
 from app.Services.calendar_service import ensure_default_calendar
+
+DeleteScope = Literal["all", "occurrence", "following"]
 
 
 class EventError(Exception):
@@ -111,10 +116,16 @@ def _occurrence_out(
 
 
 def _expand_master(
-    master: Event, data_key: bytes, window_start: datetime, window_end: datetime
+    master: Event,
+    data_key: bytes,
+    window_start: datetime,
+    window_end: datetime,
+    cancelled_dates: frozenset[str],
 ) -> list[EventOut]:
     """Decrypt the master's sensitive fields once, then emit one EventOut per
-    occurrence in the window. The master row itself is never emitted.
+    occurrence in the window, skipping any date with a live cancellation
+    exception (issue #4, scope="occurrence"). The master row itself is never
+    emitted.
     """
     weekdays = frozenset(json.loads(master.recurrence_weekdays))
     occurrences = expand_occurrences(
@@ -126,6 +137,7 @@ def _expand_master(
     return [
         _occurrence_out(master, occurrence, title, description, location)
         for occurrence in occurrences
+        if occurrence.occurrence_date.isoformat() not in cancelled_dates
     ]
 
 
@@ -224,10 +236,13 @@ async def list_events(
     """
     window_start, window_end = _naive_utc(start_at), _naive_utc(end_at)
     events = await event_repo.list_for_window(session, user_id, window_start, window_end)
+    master_ids = [event.id for event in events if event.is_recurring]
+    cancelled = await event_exception_repo.list_cancelled_dates(session, user_id, master_ids)
     out: list[EventOut] = []
     for event in events:
         if event.is_recurring:
-            out.extend(_expand_master(event, data_key, window_start, window_end))
+            dates = frozenset(cancelled.get(event.id, set()))
+            out.extend(_expand_master(event, data_key, window_start, window_end, dates))
         else:
             out.append(to_out(event, data_key))
     return out
@@ -290,12 +305,67 @@ async def patch_event(
     return to_out(event, data_key)
 
 
-async def delete_event(session: AsyncSession, user_id: str, event_id: str) -> None:
-    event = await event_repo.get_event(session, user_id, event_id)
-    if event is None:
-        raise EventError(404, "event not found")
+def _require_occurrence_date(occurrence_date: str | None, scope: str) -> str:
+    if occurrence_date is None or not DATE_YMD.match(occurrence_date):
+        raise EventError(400, f"occurrence_date is required for scope={scope}")
+    return occurrence_date
+
+
+async def _delete_all(session: AsyncSession, event: Event, _occurrence_date: str | None) -> None:
+    """Soft-delete the master (or a plain, non-recurring event) outright —
+    the behavior every scope falls back to.
+    """
     old_start, old_end = event.start_at, event.end_at
     event.deleted_at = utc_now()
     await session.flush()
-    await _reassign_range(session, user_id, old_start, old_end)
+    await _reassign_range(session, event.user_id, old_start, old_end)
+
+
+async def _delete_occurrence(
+    session: AsyncSession, event: Event, occurrence_date: str | None
+) -> None:
+    """Cancel one occurrence: write a live exception row, master stays put."""
+    when = _require_occurrence_date(occurrence_date, "occurrence")
+    event_exception_repo.add_exception(session, event.id, event.user_id, when)
+    await session.flush()
+
+
+async def _delete_following(
+    session: AsyncSession, event: Event, occurrence_date: str | None
+) -> None:
+    """Cut the series off before `occurrence_date`: earlier occurrences stay,
+    that date and every later one vanish. If the cutoff lands before the
+    master's own anchor start (deleting from the first occurrence), there is
+    nothing left to keep — soft-delete the whole master instead.
+    """
+    when = _require_occurrence_date(occurrence_date, "following")
+    cutoff = datetime.combine(date.fromisoformat(when), time.min) - timedelta(seconds=1)
+    if cutoff < event.start_at:
+        await _delete_all(session, event, None)
+        return
+    event.recurrence_end = cutoff
+    await session.flush()
+
+
+_DELETE_SCOPE_HANDLERS: dict[
+    DeleteScope, Callable[[AsyncSession, Event, str | None], Awaitable[None]]
+] = {
+    "all": _delete_all,
+    "occurrence": _delete_occurrence,
+    "following": _delete_following,
+}
+
+
+async def delete_event(
+    session: AsyncSession,
+    user_id: str,
+    event_id: str,
+    scope: DeleteScope = "all",
+    occurrence_date: str | None = None,
+) -> None:
+    event = await event_repo.get_event(session, user_id, event_id)
+    if event is None:
+        raise EventError(404, "event not found")
+    handler = _DELETE_SCOPE_HANDLERS[scope]
+    await handler(session, event, occurrence_date)
     await session.commit()

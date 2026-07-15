@@ -18,3 +18,6 @@ TIME_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 # First JSON object embedded in an LLM completion.
 JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
+
+# YYYY-MM-DD occurrence dates on recurring-event delete/exception operations.
+DATE_YMD = re.compile(r"^\d{4}-\d{2}-\d{2}$")

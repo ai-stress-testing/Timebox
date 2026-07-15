@@ -1,4 +1,6 @@
 """Event routes — thin: validate, delegate, map service errors to HTTP."""
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,10 +63,12 @@ async def patch_event(
 @router.delete("/{event_id}", status_code=204)
 async def delete_event(
     event_id: str,
+    scope: Literal["all", "occurrence", "following"] = Query(default="all"),
+    occurrence_date: str | None = Query(default=None),
     ctx: SessionContext = Depends(get_session_context),
     db: AsyncSession = Depends(get_session),
 ) -> None:
     try:
-        await event_service.delete_event(db, ctx.user_id, event_id)
+        await event_service.delete_event(db, ctx.user_id, event_id, scope, occurrence_date)
     except event_service.EventError as exc:
         raise HTTPException(exc.status_code, exc.detail) from exc
