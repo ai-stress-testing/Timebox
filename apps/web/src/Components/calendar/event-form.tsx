@@ -4,7 +4,7 @@ import {
   event_type_labels,
   event_type_options,
 } from "../../lib/dispatch-maps/labels";
-import { SelectField, TextAreaField, TextField } from "../ui/field";
+import { CheckboxField, SelectField, TextAreaField, TextField } from "../ui/field";
 import type { EventDraft } from "./event-draft";
 
 type FieldsProps = {
@@ -63,6 +63,16 @@ function DateRow({ draft, errors, on_change }: FieldsProps) {
   );
 }
 
+function AllDayRow({ draft, on_change }: FieldsProps) {
+  return (
+    <CheckboxField
+      label="All day"
+      checked={draft.is_all_day}
+      onChange={(event) => on_change({ is_all_day: event.target.checked })}
+    />
+  );
+}
+
 function TimesRow({ draft, errors, on_change }: FieldsProps) {
   return (
     <div className="grid grid-cols-2 gap-3">
@@ -98,7 +108,8 @@ export function EventFormFields(props: FieldsProps) {
       />
       <TypeAttentionRow {...props} />
       <DateRow {...props} />
-      <TimesRow {...props} />
+      <AllDayRow {...props} />
+      {draft.is_all_day ? null : <TimesRow {...props} />}
       <TextField
         label="Estimated minutes"
         type="number"

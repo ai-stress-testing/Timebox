@@ -72,6 +72,32 @@ async def test_canvas_type_overlap_rules(unlocked) -> None:
     assert meeting.json()["canvas_event_type"] == "involved_only"
 
 
+async def test_all_day_event_excluded_from_timed_overlap(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    meeting = await client.post(
+        "/events", json=_event_payload(title="Standup"), headers=headers
+    )
+    assert meeting.json()["canvas_event_type"] == "focus_only"
+
+    holiday = await client.post(
+        "/events",
+        json=_event_payload(
+            title="Public Holiday",
+            event_type="personal",
+            attention_class="passive",
+            start_at="2026-07-14T00:00:00Z",
+            end_at="2026-07-15T00:00:00Z",
+            is_all_day=True,
+        ),
+        headers=headers,
+    )
+    assert holiday.status_code == 201, holiday.text
+    assert holiday.json()["is_all_day"] is True
+
+    refreshed = await client.get(f"/events/{meeting.json()['id']}", headers=headers)
+    assert refreshed.json()["canvas_event_type"] == "focus_only"
+
+
 async def test_titles_encrypted_at_rest(unlocked) -> None:
     client, _keyfile, headers = unlocked
     secret_title = "Very private appointment xyzzy"

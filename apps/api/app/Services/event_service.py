@@ -52,10 +52,24 @@ def to_out(event: Event, data_key: bytes) -> EventOut:
 
 
 async def _reassign_one(session: AsyncSession, event: Event) -> None:
+    """Recompute one event's canvas type from its overlapping peers.
+
+    All-day events (a holiday spanning 00:00-24:00) never drive the timed
+    overlap classification of the events they happen to span, and never get
+    a "spans everything" canvas type themselves — they keep the single-event
+    default for their own attention class.
+    """
+    if event.is_all_day:
+        event.canvas_event_type = assign_canvas_type(
+            AttentionClass(event.attention_class), frozenset()
+        ).value
+        return
     peers = await event_repo.list_overlapping(
         session, event.user_id, event.start_at, event.end_at, event.id
     )
-    peer_classes = frozenset(AttentionClass(peer.attention_class) for peer in peers)
+    peer_classes = frozenset(
+        AttentionClass(peer.attention_class) for peer in peers if not peer.is_all_day
+    )
     own_class = AttentionClass(event.attention_class)
     event.canvas_event_type = assign_canvas_type(own_class, peer_classes).value
 

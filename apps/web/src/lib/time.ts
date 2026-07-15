@@ -144,6 +144,15 @@ export function compose_local_iso(date_str: string, time_str: string): string {
   return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
 
+/** ISO instant for local midnight of the day AFTER "YYYY-MM-DD". */
+export function next_day_midnight_iso(date_str: string): string {
+  if (!date_ymd_pattern.test(date_str)) return "";
+  const date = new Date(`${date_str}T00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + 1);
+  return date.toISOString();
+}
+
 export function next_full_hour(from: Date): Date {
   const result = new Date(from);
   result.setMinutes(0, 0, 0);

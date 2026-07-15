@@ -7,6 +7,7 @@ import type {
 import {
   compose_local_iso,
   date_input_value,
+  next_day_midnight_iso,
   slot_start,
   time_input_value,
 } from "../../lib/time";
@@ -14,8 +15,9 @@ import {
 /**
  * String-typed form state for the event drawer. The target date is a single
  * field shared by start and end (most events happen within one day); start
- * and end are time-only. Kept extensible for an upcoming all-day toggle and
- * repeats section.
+ * and end are time-only unless `is_all_day` is set, in which case the time
+ * fields are ignored and the whole day is boxed. Kept extensible for an
+ * upcoming repeats section.
  */
 export type EventDraft = {
   title: string;
@@ -24,6 +26,7 @@ export type EventDraft = {
   date_local: string;
   start_time: string;
   end_time: string;
+  is_all_day: boolean;
   estimated_minutes: string;
   description: string;
   status: EventStatus;
@@ -38,20 +41,30 @@ export function draft_from_slot(start: Date): EventDraft {
     date_local: date_input_value(start.toISOString()),
     start_time: time_input_value(start.toISOString()),
     end_time: time_input_value(end.toISOString()),
+    is_all_day: false,
     estimated_minutes: "",
     description: "",
     status: "scheduled",
   };
 }
 
+/** Sensible time-field defaults for an all-day event, in case the toggle is unchecked. */
+const default_all_day_times = { start_time: "09:00", end_time: "10:00" } as const;
+
 export function draft_from_event(event: CalendarEvent): EventDraft {
+  const is_all_day = event.is_all_day ?? false;
   return {
     title: event.title,
     event_type: event.event_type,
     attention_class: event.attention_class,
     date_local: date_input_value(event.start_at),
-    start_time: time_input_value(event.start_at),
-    end_time: time_input_value(event.end_at),
+    start_time: is_all_day
+      ? default_all_day_times.start_time
+      : time_input_value(event.start_at),
+    end_time: is_all_day
+      ? default_all_day_times.end_time
+      : time_input_value(event.end_at),
+    is_all_day,
     estimated_minutes:
       event.estimated_minutes == null ? "" : String(event.estimated_minutes),
     description: event.description ?? "",
@@ -69,6 +82,20 @@ const error_field_overrides: Record<string, string> = {
   end_at: "end_time",
 };
 
+/** Start/end ISO instants for the draft's temporal fields. */
+function draft_span(draft: EventDraft): { start_at: string; end_at: string } {
+  if (draft.is_all_day) {
+    return {
+      start_at: compose_local_iso(draft.date_local, "00:00"),
+      end_at: next_day_midnight_iso(draft.date_local),
+    };
+  }
+  return {
+    start_at: compose_local_iso(draft.date_local, draft.start_time),
+    end_at: compose_local_iso(draft.date_local, draft.end_time),
+  };
+}
+
 /** Validate the draft with zod and produce the EventCreate payload. */
 export function build_event_create(draft: EventDraft): DraftBuildResult {
   const estimated = draft.estimated_minutes.trim();
@@ -76,8 +103,8 @@ export function build_event_create(draft: EventDraft): DraftBuildResult {
     title: draft.title.trim(),
     event_type: draft.event_type,
     attention_class: draft.attention_class,
-    start_at: compose_local_iso(draft.date_local, draft.start_time),
-    end_at: compose_local_iso(draft.date_local, draft.end_time),
+    ...draft_span(draft),
+    is_all_day: draft.is_all_day,
     ...(estimated === "" ? {} : { estimated_minutes: Number(estimated) }),
     ...(draft.description.trim() === ""
       ? {}

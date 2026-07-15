@@ -8,6 +8,7 @@ import {
   visible_hours,
 } from "../../lib/time";
 import type { WeekRange } from "../../lib/time";
+import { AllDayStrip } from "./all-day-strip";
 import { EventBlock } from "./event-block";
 
 type WeekGridProps = {
@@ -67,16 +68,30 @@ function DayColumn({ day, events, on_slot, on_event }: {
   );
 }
 
+/** Timed events drive the hour grid; all-day events render only in the strip above it. */
+function split_by_all_day(events: CalendarEvent[]): {
+  timed: CalendarEvent[];
+  all_day: CalendarEvent[];
+} {
+  const all_day = events.filter((event) => event.is_all_day === true);
+  const timed = events.filter((event) => event.is_all_day !== true);
+  return { timed, all_day };
+}
+
 export function WeekGrid({ range, events, on_slot, on_event }: WeekGridProps) {
+  const { timed, all_day } = split_by_all_day(events);
   return (
-    <div
-      className="grid overflow-x-auto rounded-lg border border-edge bg-surface-1"
-      style={{ gridTemplateColumns: "var(--tb-gutter-width) repeat(7, minmax(0, 1fr))" }}
-    >
-      <HourGutter />
-      {range.days.map((day) => (
-        <DayColumn key={day.toISOString()} day={day} events={events} on_slot={on_slot} on_event={on_event} />
-      ))}
+    <div className="overflow-x-auto rounded-lg border border-edge bg-surface-1">
+      <AllDayStrip days={range.days} events={all_day} on_event={on_event} />
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: "var(--tb-gutter-width) repeat(7, minmax(0, 1fr))" }}
+      >
+        <HourGutter />
+        {range.days.map((day) => (
+          <DayColumn key={day.toISOString()} day={day} events={timed} on_slot={on_slot} on_event={on_event} />
+        ))}
+      </div>
     </div>
   );
 }
