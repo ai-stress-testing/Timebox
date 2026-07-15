@@ -21,12 +21,18 @@ _OPEN_PATHS = frozenset(
 
 
 class SessionAuthMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: object, store: SessionStore) -> None:
+    def __init__(self, app: object, store: SessionStore, api_prefix: str) -> None:
         super().__init__(app)  # type: ignore[arg-type]
         self._store = store
+        self._api_prefix = api_prefix
 
     async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
-        if request.url.path in _OPEN_PATHS or request.method == "OPTIONS":
+        is_api_path = request.url.path.startswith(self._api_prefix)
+        if (
+            not is_api_path
+            or request.url.path in _OPEN_PATHS
+            or request.method == "OPTIONS"
+        ):
             return await call_next(request)
         header = request.headers.get("authorization", "")
         has_bearer = header.lower().startswith("bearer ")

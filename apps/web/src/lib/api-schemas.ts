@@ -7,6 +7,12 @@ import { time_hhmm_pattern } from "./patterns";
  * every form input is validated with the *Create schemas before sending.
  */
 
+/** Coerce a form's string state into a number before validating it.
+ * `z.coerce` turns `"abc"` into `NaN` and `""` into `0`; both then fail the
+ * `int()`/`positive()` checks below, closing the NaN-reaches-API hole. */
+export const positive_int_from_input = z.coerce.number().int().positive();
+export const nonneg_int_from_input = z.coerce.number().int().nonnegative();
+
 /* ---------------------------------------------------------------- enums */
 
 export const event_type_schema = z.enum([
@@ -260,6 +266,19 @@ export const schedule_apply_schema = z.object({ events_created: z.number() });
 
 /* ------------------------------------------------------------- pomodoro */
 
+export const pomodoro_start_schema = z.object({
+  event_id: z.string().min(1),
+  intended_minutes: positive_int_from_input,
+});
+export type PomodoroStart = z.infer<typeof pomodoro_start_schema>;
+
+export const pomodoro_finish_input_schema = z.object({
+  completion_flag: z.boolean(),
+  meaningful_minutes: nonneg_int_from_input.optional(),
+  notes: z.string().optional(),
+});
+export type PomodoroFinishInput = z.infer<typeof pomodoro_finish_input_schema>;
+
 export const pomodoro_session_schema = z.object({
   id: z.string(),
   event_id: z.string(),
@@ -311,6 +330,11 @@ export const prompt_response_kind_schema = z.enum([
   "dismissed",
 ]);
 export type PromptResponseKind = z.infer<typeof prompt_response_kind_schema>;
+
+export const prompt_respond_body_schema = z.object({
+  response: prompt_response_kind_schema,
+  remaining_minutes: positive_int_from_input.optional(),
+});
 
 export const prompt_respond_schema = z.object({
   prompt: residual_prompt_schema,

@@ -1,10 +1,12 @@
 """Timebox API — app factory + lifespan. Single user, zero surveillance."""
 import asyncio
+import os
 from contextlib import asynccontextmanager, suppress
 from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.Core.config import settings
 from app.Core.database import init_models, session_factory
@@ -53,7 +55,11 @@ def create_app() -> FastAPI:
     )
     app.state.llm_provider = build_default_provider()
 
-    app.add_middleware(SessionAuthMiddleware, store=app.state.session_store)
+    app.add_middleware(
+        SessionAuthMiddleware,
+        store=app.state.session_store,
+        api_prefix=settings.api_prefix,
+    )
     app.add_middleware(TraceIdMiddleware)
     app.add_middleware(
         CORSMiddleware,
@@ -78,6 +84,10 @@ def create_app() -> FastAPI:
     @app.get(f"{settings.api_prefix}/health")
     async def health() -> dict[str, object]:
         return {"ok": True, "service": "timebox-api"}
+
+    web_dir = settings.web_dist_dir
+    if web_dir and os.path.isdir(web_dir):
+        app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
 
     return app
 

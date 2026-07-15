@@ -31,6 +31,9 @@ export type ApiRequestOptions = {
 };
 
 const detail_schema = z.object({ detail: z.string() });
+const detail_list_schema = z.object({
+  detail: z.array(z.object({ msg: z.string() }).passthrough()).min(1),
+});
 
 function build_headers(): Record<string, string> {
   const token = use_session_store.getState().token;
@@ -60,8 +63,11 @@ async function run_fetch(
 async function extract_detail(response: Response): Promise<string> {
   const fallback = `Request failed (${response.status}).`;
   const payload: unknown = await response.json().catch(() => null);
-  const parsed = detail_schema.safeParse(payload);
-  return parsed.success ? parsed.data.detail : fallback;
+  const as_string = detail_schema.safeParse(payload);
+  if (as_string.success) return as_string.data.detail;
+  const as_list = detail_list_schema.safeParse(payload);
+  if (as_list.success) return as_list.data.detail.map((item) => item.msg).join("; ");
+  return fallback;
 }
 
 async function ensure_ok(response: Response): Promise<void> {

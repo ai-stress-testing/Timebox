@@ -1,6 +1,6 @@
 # Spec 002 — Packaging & Boundary-Validation Hardening
 
-**Status:** in progress
+**Status:** implemented (prototype)
 **Roles:** Fable = orchestrator/macro-planner + verifier · Opus = micro-planner
 (granular sub-issues in `tasks.md`) · Sonnet = worker (implementation)
 

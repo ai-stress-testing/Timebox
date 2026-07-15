@@ -33,6 +33,17 @@ specs/          spec-kit feature specs (spec / plan / tasks)
 .claude/agents/ engineering agents (backend-architect, frontend-developer, ai-engineer, …)
 ```
 
+## System requirements
+
+- **Python ≥ 3.11** (3.12 recommended) — SQLite ships bundled with CPython, no extra install.
+- **Node ≥ 20** and **npm** (bundled with Node).
+- **uv** (optional) — fast venv/installer; the setup falls back to `python -m venv` + `pip` if absent.
+- **Ollama** (optional) — only for AI timeboxing; the calendar works fully without it. Set `TIMEBOX_OLLAMA_BASE_URL` / `TIMEBOX_OLLAMA_MODEL`.
+- **OS**: Linux, macOS, or Windows (WSL2 recommended on Windows).
+- **Zero-prerequisite alternative**: Docker — `docker build -t timebox . && docker run -p 8787:8787 timebox`, then open `http://localhost:8787`. To reach a host Ollama add `-e TIMEBOX_OLLAMA_BASE_URL=http://host.docker.internal:11434 --add-host=host.docker.internal:host-gateway`.
+
+One-command dev start: `./start.sh` boots both the API and web dev server.
+
 ## Run it
 
 ```bash

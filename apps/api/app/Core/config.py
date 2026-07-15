@@ -27,5 +27,8 @@ class Settings(BaseSettings):
     mc_max_iterations: int = 10_000
     mc_default_window_days: int = 49
 
+    # SPA dist; when set+exists, API serves the web app at /.
+    web_dist_dir: str | None = None
+
 
 settings = Settings()

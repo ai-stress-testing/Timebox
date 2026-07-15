@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { use_timebox_proposal } from "../../Hooks/use-ai";
 import { use_create_event } from "../../Hooks/use-events";
-import { timebox_request_schema } from "../../lib/api-schemas";
+import { event_create_schema, timebox_request_schema } from "../../lib/api-schemas";
 import type { TimeboxResponse } from "../../lib/api-schemas";
 import { add_days, format_day_and_time, iso_to_local_input, local_input_to_iso, next_full_hour } from "../../lib/time";
 import { is_service_unavailable, to_error_message } from "../../Services/api-client";
@@ -72,14 +72,20 @@ export function TimeboxDrawer() {
 
   const handle_accept = async () => {
     if (!propose.data) return;
+    const candidate = {
+      title: title.trim(),
+      event_type: "task" as const,
+      start_at: propose.data.proposal.start_at,
+      end_at: propose.data.proposal.end_at,
+      ...(minutes.trim() === "" ? {} : { estimated_minutes: Number(minutes) }),
+    };
+    const parsed = event_create_schema.safeParse(candidate);
+    if (!parsed.success) {
+      push_toast("Check the title and minutes before adding.", "danger");
+      return;
+    }
     try {
-      await create.mutateAsync({
-        title: title.trim(),
-        event_type: "task",
-        start_at: propose.data.proposal.start_at,
-        end_at: propose.data.proposal.end_at,
-        estimated_minutes: Number(minutes) || undefined,
-      });
+      await create.mutateAsync(parsed.data);
       push_toast("Timeboxed onto your calendar.", "ok");
       close();
     } catch (cause) {
