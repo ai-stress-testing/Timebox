@@ -1,7 +1,11 @@
-"""AI timebox schemas — Ollama only, prompts never persisted."""
+"""AI timebox schemas — local LLM runtimes only, prompts never persisted."""
+from typing import Literal
+
 from pydantic import Field, model_validator
 
 from app.Schemas.base import ApiModel, UtcDateTime
+
+ProviderKindField = Literal["ollama", "openai_compat"]
 
 
 class AiHealthResponse(ApiModel):
@@ -9,6 +13,21 @@ class AiHealthResponse(ApiModel):
     model: str
     base_url: str
     detail: str | None
+
+
+class LlmSettingsIn(ApiModel):
+    provider_kind: ProviderKindField
+    base_url: str = Field(min_length=1, max_length=500)
+    model: str = Field(min_length=1, max_length=200)
+    # None = leave the stored key unchanged; "" = clear it; anything else = set it.
+    api_key: str | None = Field(default=None, max_length=500)
+
+
+class LlmSettingsOut(ApiModel):
+    provider_kind: ProviderKindField
+    base_url: str
+    model: str
+    has_api_key: bool
 
 
 class TimeboxRequest(ApiModel):

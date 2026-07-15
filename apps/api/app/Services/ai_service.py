@@ -1,5 +1,6 @@
-"""AI timeboxing — Ollama proposes a slot; deterministic fallback if the model
-output is unparseable. Prompt privacy: only SHA-256 hashes are persisted.
+"""AI timeboxing — the user's resolved local LLM provider proposes a slot;
+deterministic fallback if the model output is unparseable. Prompt privacy:
+only SHA-256 hashes are persisted.
 """
 import json
 import time
@@ -8,13 +9,22 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.Core import crypto
+from app.Core.config import settings
 from app.Core.patterns import JSON_OBJECT
 from app.Middleware.prompt_sanitiser import sanitise_prompt
 from app.Models.ai import AiSession
-from app.Repositories import ai_repo, event_repo
-from app.Schemas.ai import SlotProposal, TimeboxRequest, TimeboxResponse
+from app.Models.llm_settings import LlmSettings
+from app.Repositories import ai_repo, event_repo, llm_repo
+from app.Schemas.ai import (
+    LlmSettingsIn,
+    LlmSettingsOut,
+    SlotProposal,
+    TimeboxRequest,
+    TimeboxResponse,
+)
 from app.Schemas.base import _to_naive_utc
 from app.Services.Llm.base import ChatMessage, LlmProvider, LlmUnavailableError
+from app.Services.Llm.factory import build_provider
 
 _SYSTEM_PROMPT = (
     "You are Timebox's scheduling assistant. Given a task and a list of busy "
@@ -118,3 +128,69 @@ async def propose_timebox(
     ai_repo.add_ai_session(session, ai_session)
     await session.commit()
     return TimeboxResponse(proposal=proposal, ai_session_id=ai_session.id)
+
+
+async def resolve_provider(
+    session: AsyncSession,
+    user_id: str,
+    data_key: bytes,
+    app_default_provider: LlmProvider,
+) -> tuple[LlmProvider, bool]:
+    """The effective provider for this user: their saved llm_settings row, or
+    the app-wide default built from env at boot. Returns (provider, owns_client)
+    — callers must `await provider.close()` when owns_client is True, since a
+    factory-built provider is not the long-lived app singleton.
+    """
+    row = await llm_repo.get_settings(session, user_id)
+    if row is None:
+        return app_default_provider, False
+    api_key = crypto.decrypt_field(data_key, row.api_key_enc) if row.api_key_enc else None
+    provider = build_provider(
+        row.provider_kind, row.base_url, row.model, api_key, settings.ollama_timeout_seconds
+    )
+    return provider, True
+
+
+def _resolve_api_key_enc(
+    data_key: bytes, existing: LlmSettings | None, new_api_key: str | None
+) -> str | None:
+    """None = leave unchanged, "" = clear, anything else = encrypt + set."""
+    if new_api_key is None:
+        return existing.api_key_enc if existing else None
+    if new_api_key == "":
+        return None
+    return crypto.encrypt_field(data_key, new_api_key)
+
+
+async def get_llm_settings(session: AsyncSession, user_id: str) -> LlmSettingsOut:
+    row = await llm_repo.get_settings(session, user_id)
+    if row is None:
+        return LlmSettingsOut(
+            provider_kind=settings.llm_provider_kind,
+            base_url=settings.ollama_base_url,
+            model=settings.ollama_model,
+            has_api_key=False,
+        )
+    return LlmSettingsOut(
+        provider_kind=row.provider_kind,
+        base_url=row.base_url,
+        model=row.model,
+        has_api_key=row.api_key_enc is not None,
+    )
+
+
+async def save_llm_settings(
+    session: AsyncSession, user_id: str, data_key: bytes, payload: LlmSettingsIn
+) -> LlmSettingsOut:
+    existing = await llm_repo.get_settings(session, user_id)
+    api_key_enc = _resolve_api_key_enc(data_key, existing, payload.api_key)
+    row = await llm_repo.upsert_settings(
+        session, user_id, payload.provider_kind, payload.base_url, payload.model, api_key_enc
+    )
+    await session.commit()
+    return LlmSettingsOut(
+        provider_kind=row.provider_kind,
+        base_url=row.base_url,
+        model=row.model,
+        has_api_key=row.api_key_enc is not None,
+    )

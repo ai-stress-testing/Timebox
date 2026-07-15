@@ -39,6 +39,8 @@ function NavTabs() {
 
 export function AppHeader() {
   const open_ai_drawer = use_ui_store((state) => state.open_ai_drawer);
+  const page = use_ui_store((state) => state.page);
+  const set_page = use_ui_store((state) => state.set_page);
   const lock = use_lock();
   return (
     <header
@@ -57,6 +59,14 @@ export function AppHeader() {
         <AiHealthDot />
         <Button variant="primary" onClick={open_ai_drawer}>
           ✦ AI timebox
+        </Button>
+        <Button
+          variant="subtle"
+          onClick={() => set_page("settings")}
+          aria-label="AI provider settings"
+          aria-current={page === "settings" ? "page" : undefined}
+        >
+          ⚙
         </Button>
         <Button variant="subtle" onClick={() => lock.mutate()} aria-label="Lock the vault">
           Lock

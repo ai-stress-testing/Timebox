@@ -64,7 +64,7 @@ export function TimeboxDrawer() {
       await propose.mutateAsync(parsed.data);
     } catch (cause) {
       const message = is_service_unavailable(cause)
-        ? "Ollama isn't reachable — start it with `ollama serve` and try again. Your calendar still works without it."
+        ? "The AI provider isn't reachable — check it's running and the URL in Settings, then try again. Your calendar still works without it."
         : to_error_message(cause);
       set_error(message);
     }

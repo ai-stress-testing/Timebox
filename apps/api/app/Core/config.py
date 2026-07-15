@@ -13,7 +13,10 @@ class Settings(BaseSettings):
     # Relational store seam: point at Postgres in production, SQLite locally.
     database_url: str = "sqlite+aiosqlite:///./data/timebox.db"
 
-    # LLM seam — Ollama only in this prototype. Never hardcode model names.
+    # LLM seam — local runtimes only (constitution Article I). These are the
+    # defaults used until the single user picks something else at runtime via
+    # /ai/settings (see Models/llm_settings.py).
+    llm_provider_kind: str = "ollama"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
     ollama_timeout_seconds: float = Field(default=120.0, le=120.0)

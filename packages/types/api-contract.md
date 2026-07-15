@@ -20,6 +20,7 @@ occurrence_status= proposed | scheduled | in_progress | completed | missed | hea
 run_status       = pending | running | completed | failed | superseded
 pomodoro_status  = active | completed | abandoned
 prompt_status    = pending | confirmed | completed | timed_out | dismissed
+llm_provider_kind= ollama | openai_compat
 ```
 
 ## Vault
@@ -156,12 +157,21 @@ type TaskResidual = {
 };
 ```
 
-## AI (Ollama only)
+## AI (local runtimes only — Ollama or any OpenAI-compatible endpoint)
+
+The effective provider for `/ai/health` and `/ai/timebox` is the caller's
+saved `/ai/settings` row if one exists, else the server's env defaults
+(`TIMEBOX_LLM_PROVIDER_KIND`, `TIMEBOX_OLLAMA_BASE_URL`,
+`TIMEBOX_OLLAMA_MODEL`). `api_key` is write-only: it is encrypted at rest
+(same field crypto as event titles) and never appears in any response —
+only `has_api_key` does.
 
 | Route | Body → Response |
 |---|---|
-| `GET /ai/health` | — → `{ ok: boolean, model: string, base_url: string, detail: string|null }` (never 5xx: `ok:false` when Ollama is down) |
-| `POST /ai/timebox` | `{ task_title: string, estimated_minutes: number, window_start: iso, window_end: iso, notes?: string }` → `{ proposal: { start_at: iso, end_at: iso, rationale: string }, ai_session_id: string }` · 400 generic on sanitiser rejection · 503 `{detail}` when Ollama unreachable |
+| `GET /ai/settings` | — → `{ provider_kind: llm_provider_kind, base_url: string, model: string, has_api_key: boolean }` |
+| `PUT /ai/settings` | `{ provider_kind: llm_provider_kind, base_url: string, model: string, api_key?: string }` → same shape as `GET`. `api_key` omitted = leave unchanged, `""` = clear, non-empty = replace |
+| `GET /ai/health` | — → `{ ok: boolean, model: string, base_url: string, detail: string|null }` (never 5xx: `ok:false` when the provider is down) |
+| `POST /ai/timebox` | `{ task_title: string, estimated_minutes: number, window_start: iso, window_end: iso, notes?: string }` → `{ proposal: { start_at: iso, end_at: iso, rationale: string }, ai_session_id: string }` · 400 generic on sanitiser rejection · 503 `{detail}` when the provider is unreachable |
 
 ## Health
 

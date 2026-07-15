@@ -24,6 +24,10 @@ class StubProvider:
     def model(self) -> str:
         return "stub-model"
 
+    @property
+    def base_url(self) -> str:
+        return "http://stub.invalid"
+
     async def chat(self, messages: tuple[ChatMessage, ...]) -> str:
         self.calls.append(messages)
         return self.reply

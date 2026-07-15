@@ -370,6 +370,25 @@ export const timebox_response_schema = z.object({
 });
 export type TimeboxResponse = z.infer<typeof timebox_response_schema>;
 
+export const llm_provider_kind_schema = z.enum(["ollama", "openai_compat"]);
+export type LlmProviderKind = z.infer<typeof llm_provider_kind_schema>;
+
+export const llm_settings_in_schema = z.object({
+  provider_kind: llm_provider_kind_schema,
+  base_url: z.string().min(1, "Base URL is required").max(500),
+  model: z.string().min(1, "Model is required").max(200),
+  api_key: z.string().max(500).optional(),
+});
+export type LlmSettingsIn = z.infer<typeof llm_settings_in_schema>;
+
+export const llm_settings_out_schema = z.object({
+  provider_kind: llm_provider_kind_schema,
+  base_url: z.string(),
+  model: z.string(),
+  has_api_key: z.boolean(),
+});
+export type LlmSettingsOut = z.infer<typeof llm_settings_out_schema>;
+
 /* --------------------------------------------------------------- health */
 
 export const health_schema = z.object({
