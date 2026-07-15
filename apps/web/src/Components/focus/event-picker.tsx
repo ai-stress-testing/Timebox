@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { use_events_range } from "../../Hooks/use-events";
 import type { CalendarEvent } from "../../lib/api-schemas";
+import { positive_int_from_input } from "../../lib/api-schemas";
 import { add_days, format_day_and_time, to_iso } from "../../lib/time";
 import { Button } from "../ui/button";
 import { SelectField, TextField } from "../ui/field";
@@ -29,7 +30,19 @@ export function EventPicker({ on_start, busy }: {
   const candidates = (events.data ?? []).filter(is_startable);
   const [selected_id, set_selected_id] = useState("");
   const [minutes, set_minutes] = useState(default_intent_minutes);
+  const [error, set_error] = useState<string | null>(null);
   const selected = candidates.find((event) => event.id === selected_id) ?? candidates[0];
+
+  const handle_start = () => {
+    if (!selected) return;
+    const parsed = positive_int_from_input.safeParse(minutes);
+    if (!parsed.success) {
+      set_error("Enter a whole number of minutes greater than 0.");
+      return;
+    }
+    set_error(null);
+    on_start(selected, parsed.data);
+  };
 
   if (events.isPending) {
     return <p className="text-sm text-mid">Loading upcoming events…</p>;
@@ -60,12 +73,13 @@ export function EventPicker({ on_start, busy }: {
         type="number"
         min={1}
         value={minutes}
+        error={error ?? undefined}
         onChange={(event) => set_minutes(event.target.value)}
       />
       <Button
         variant="primary"
         disabled={busy || selected === undefined}
-        onClick={() => selected && on_start(selected, Number(minutes) || 25)}
+        onClick={handle_start}
       >
         {busy ? "Starting…" : "▶ Start pomodoro"}
       </Button>

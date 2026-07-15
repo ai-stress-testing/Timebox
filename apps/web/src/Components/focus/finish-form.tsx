@@ -1,29 +1,35 @@
 import { useState } from "react";
+import { pomodoro_finish_input_schema } from "../../lib/api-schemas";
+import type { PomodoroFinishInput } from "../../lib/api-schemas";
 import { Button } from "../ui/button";
 import { CheckboxField, TextAreaField, TextField } from "../ui/field";
 
-export type FinishInput = {
-  completion_flag: boolean;
-  meaningful_minutes?: number;
-  notes?: string;
-};
+export type { PomodoroFinishInput as FinishInput } from "../../lib/api-schemas";
 
 /** End-of-session form: done flag, meaningful minutes, notes. */
 export function FinishForm({ on_finish, busy }: {
-  on_finish: (input: FinishInput) => void;
+  on_finish: (input: PomodoroFinishInput) => void;
   busy: boolean;
 }) {
   const [done, set_done] = useState(true);
   const [meaningful, set_meaningful] = useState("");
   const [notes, set_notes] = useState("");
+  const [error, set_error] = useState<string | null>(null);
 
   const handle_finish = () => {
     const meaningful_trimmed = meaningful.trim();
-    on_finish({
+    const candidate = {
       completion_flag: done,
-      ...(meaningful_trimmed === "" ? {} : { meaningful_minutes: Number(meaningful_trimmed) }),
+      ...(meaningful_trimmed === "" ? {} : { meaningful_minutes: meaningful_trimmed }),
       ...(notes.trim() === "" ? {} : { notes: notes.trim() }),
-    });
+    };
+    const parsed = pomodoro_finish_input_schema.safeParse(candidate);
+    if (!parsed.success) {
+      set_error("Meaningful minutes must be a whole number ≥ 0.");
+      return;
+    }
+    set_error(null);
+    on_finish(parsed.data);
   };
 
   return (
@@ -39,6 +45,7 @@ export function FinishForm({ on_finish, busy }: {
         min={0}
         value={meaningful}
         placeholder="How much of it was real focus?"
+        error={error ?? undefined}
         onChange={(event) => set_meaningful(event.target.value)}
       />
       <TextAreaField

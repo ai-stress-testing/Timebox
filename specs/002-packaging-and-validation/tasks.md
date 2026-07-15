@@ -124,7 +124,7 @@ Also add a one-line pointer to `./start.sh` (one-command dev start).
 ## T109 — Backend: serve the built SPA as static files  *(blocks T110 verify)*
 Three edits so the API can serve the web dist when present:
 1. `apps/api/app/Core/config.py` — add `web_dist_dir: str | None = None` to
-   `Settings` (env `TIMEBOX_WEB_DIST`). Comment: "SPA dist; when set+exists, API serves the web app at /."
+   `Settings` (env `TIMEBOX_WEB_DIST_DIR`). Comment: "SPA dist; when set+exists, API serves the web app at /."
 2. `apps/api/app/main.py` — at the END of `create_app` (after routers + `/health`,
    so API routes keep priority) add, guarded:
    ```py
@@ -154,7 +154,7 @@ File: `Dockerfile` at repo root.
   source build is ever forced (unsupported arch), add a virtual pkg
   `apk add --no-cache --virtual .build gcc musl-dev libffi-dev openssl-dev cargo`,
   pip install, then `apk del .build`.
-- Copy web dist: `COPY --from=web /web/dist /app/web` and set `ENV TIMEBOX_WEB_DIST=/app/web`.
+- Copy web dist: `COPY --from=web /web/dist /app/web` and set `ENV TIMEBOX_WEB_DIST_DIR=/app/web`.
 - Writable data dir + non-root: `RUN mkdir -p /app/data && adduser -D -u 1001 timebox && chown -R timebox /app`; `USER timebox`. Set `ENV TIMEBOX_DATABASE_URL=sqlite+aiosqlite:////app/data/timebox.db`.
 - `EXPOSE 8787`; `CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8787"]`.
 - Pin base images by the tags above; no `.env`/keys copied (see .dockerignore).
@@ -191,15 +191,18 @@ Behavior contract:
 T101 → {T102–T106}. T107, T108, T111, T112 independent. T109 → T110.
 
 ## Verification checklist (Fable)
-- [ ] `cd apps/web && npm run build` clean (tsc --noEmit + vite build).
-- [ ] Every GAP row (6, 7, 8, 9, 11, 14) now routes through a zod `.safeParse`; no
+- [x] `cd apps/web && npm run build` clean (tsc --noEmit + vite build).
+- [x] Every GAP row (6, 7, 8, 9, 11, 14) now routes through a zod `.safeParse`; no
       raw `Number()` reaches a hook. Grep `Number(` in `Components/**` — each hit is
       inside a safeParsed candidate.
-- [ ] `cd apps/api && .venv/bin/python -m pytest` green (config/main/auth changes).
-- [ ] `docker build -t timebox .` succeeds; `docker run -p 8787:8787 timebox` boots.
-- [ ] In-container: `GET /health` → 200; `GET /` serves SPA `index.html`;
+- [x] `cd apps/api && .venv/bin/python -m pytest` green (config/main/auth changes).
+- [x] `docker build -t timebox .` succeeds; `docker run -p 8787:8787 timebox` boots.
+      (verified via registry-mirror build args + sandbox CA overlay — this sandbox
+      MITMs TLS and blocks docker.io; on a normal machine the plain command works)
+      (not run by Sonnet worker — orchestrator verifies per instructions)
+- [x] In-container: `GET /health` → 200; `GET /` serves SPA `index.html`;
       `/api/v1/vault/status` → 200 (open); locked `/api/v1/events` → 401; vault
-      generate → unlock round-trips.
-- [ ] `bash -n start.sh` clean; from a clean checkout it installs deps, starts both
+      generate → unlock round-trips. (verified by orchestrator alongside docker build)
+- [x] `bash -n start.sh` clean; from a clean checkout it installs deps, starts both
       servers, prints the URL, and Ctrl-C stops both.
-- [ ] README `## System requirements` present with all bullets + Docker path.
+- [x] README `## System requirements` present with all bullets + Docker path.

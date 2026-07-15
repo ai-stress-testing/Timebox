@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { use_apply_run, use_create_run } from "../../Hooks/use-schedule";
 import type { Occurrence, ScheduleRunDetail } from "../../lib/api-schemas";
+import { schedule_run_create_schema } from "../../lib/api-schemas";
 import { format_day_and_time } from "../../lib/time";
 import { to_error_message } from "../../Services/api-client";
 import { push_toast } from "../../Store/toast-store";
@@ -54,11 +55,17 @@ export function PlanPanel() {
   const apply_run = use_apply_run();
 
   const handle_plan = async () => {
+    const candidate = {
+      window_days: Number(window_days),
+      ...(seed.trim() === "" ? {} : { seed: Number(seed) }),
+    };
+    const parsed = schedule_run_create_schema.safeParse(candidate);
+    if (!parsed.success) {
+      push_toast("Check window/seed.", "danger");
+      return;
+    }
     try {
-      const detail = await create_run.mutateAsync({
-        window_days: Number(window_days) || 14,
-        ...(seed.trim() === "" ? {} : { seed: Number(seed) }),
-      });
+      const detail = await create_run.mutateAsync(parsed.data);
       set_run(detail);
     } catch (cause) {
       push_toast(to_error_message(cause), "danger");

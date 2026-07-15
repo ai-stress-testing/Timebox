@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { use_respond_prompt } from "../../Hooks/use-pomodoro";
 import type { ResidualPrompt } from "../../lib/api-schemas";
+import { positive_int_from_input } from "../../lib/api-schemas";
 import { prompt_actions } from "../../lib/dispatch-maps/prompt-responses";
 import { to_error_message } from "../../Services/api-client";
 import { push_toast } from "../../Store/toast-store";
@@ -15,7 +16,10 @@ export function ResidualPromptCard({ prompt }: { prompt: ResidualPrompt }) {
   const handle_action = (kind_index: number) => {
     const action = prompt_actions[kind_index];
     if (!action) return;
-    const body = action.build_body(Number(remaining) || null);
+    const parsed = action.needs_minutes
+      ? positive_int_from_input.safeParse(remaining)
+      : null;
+    const body = action.build_body(parsed?.success ? parsed.data : null);
     if (body === null) {
       push_toast("Enter the remaining minutes first.", "danger");
       return;
