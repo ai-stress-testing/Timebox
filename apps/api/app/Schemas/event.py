@@ -1,0 +1,66 @@
+"""Event schemas — canvas_event_type is server-assigned, never client-set."""
+from pydantic import Field, model_validator
+
+from app.Schemas.base import (
+    ApiModel,
+    AttentionClass,
+    AttentionClassField,
+    CanvasEventType,
+    EventStatus,
+    EventStatusField,
+    EventTypeField,
+    UtcDateTime,
+)
+
+
+class EventCreate(ApiModel):
+    title: str = Field(min_length=1, max_length=300)
+    description: str | None = Field(default=None, max_length=4000)
+    location: str | None = Field(default=None, max_length=300)
+    calendar_id: str | None = None
+    event_type: EventTypeField
+    attention_class: AttentionClassField = AttentionClass.active
+    start_at: UtcDateTime
+    end_at: UtcDateTime
+    is_all_day: bool = False
+    estimated_minutes: int | None = Field(default=None, gt=0, le=24 * 60)
+
+    @model_validator(mode="after")
+    def check_range(self) -> "EventCreate":
+        if self.end_at <= self.start_at:
+            raise ValueError("end_at must be after start_at")
+        return self
+
+
+class EventPatch(ApiModel):
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    description: str | None = Field(default=None, max_length=4000)
+    location: str | None = Field(default=None, max_length=300)
+    calendar_id: str | None = None
+    event_type: EventTypeField | None = None
+    attention_class: AttentionClassField | None = None
+    status: EventStatusField | None = None
+    start_at: UtcDateTime | None = None
+    end_at: UtcDateTime | None = None
+    is_all_day: bool | None = None
+    estimated_minutes: int | None = Field(default=None, gt=0, le=24 * 60)
+
+
+class EventOut(ApiModel):
+    id: str
+    calendar_id: str
+    title: str
+    description: str | None
+    location: str | None
+    event_type: EventTypeField
+    attention_class: AttentionClass
+    canvas_event_type: CanvasEventType
+    status: EventStatus
+    start_at: UtcDateTime
+    end_at: UtcDateTime
+    is_all_day: bool
+    estimated_minutes: int | None
+    actual_minutes: int | None
+    residual_of: str | None
+    created_at: UtcDateTime
+    updated_at: UtcDateTime

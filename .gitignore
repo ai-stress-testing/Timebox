@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+
+# Runtime data — the SQLite store lives here, never in git
+apps/api/data/
+*.db
+
+# Key files must NEVER be committed — they are the user's identity
+*.key
+timebox.key
+
+# Local env
+.env

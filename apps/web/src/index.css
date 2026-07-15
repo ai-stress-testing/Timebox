@@ -1,0 +1,122 @@
+@import "tailwindcss";
+@import "./lib/tokens.css";
+
+/*
+ * Tailwind v4 theme mapping — every utility value below resolves to a token
+ * from src/lib/tokens.css. Components use these utilities (or the raw
+ * custom properties) and never literal colors / px values.
+ */
+@theme inline {
+  --color-*: initial;
+  --color-surface-0: var(--tb-surface-0);
+  --color-surface-1: var(--tb-surface-1);
+  --color-surface-2: var(--tb-surface-2);
+  --color-surface-3: var(--tb-surface-3);
+  --color-overlay: var(--tb-overlay);
+  --color-edge: var(--tb-border);
+  --color-edge-strong: var(--tb-border-strong);
+  --color-hi: var(--tb-text-hi);
+  --color-mid: var(--tb-text-mid);
+  --color-low: var(--tb-text-low);
+  --color-accent: var(--tb-accent);
+  --color-accent-2: var(--tb-accent-2);
+  --color-accent-ink: var(--tb-accent-ink);
+  --color-ok: var(--tb-color-ok);
+  --color-warn: var(--tb-color-warn);
+  --color-danger: var(--tb-color-danger);
+  --color-slate: var(--tb-color-slate);
+  --color-rose: var(--tb-color-rose);
+  --color-amber: var(--tb-color-amber);
+  --color-violet: var(--tb-color-violet);
+  --color-emerald: var(--tb-color-emerald);
+  --color-sky: var(--tb-color-sky);
+  --color-stone: var(--tb-color-stone);
+  --color-orange: var(--tb-color-orange);
+
+  --spacing: var(--tb-space-unit);
+
+  --radius-*: initial;
+  --radius-sm: var(--tb-radius-sm);
+  --radius-md: var(--tb-radius-md);
+  --radius-lg: var(--tb-radius-lg);
+  --radius-xl: var(--tb-radius-xl);
+  --radius-full: var(--tb-radius-full);
+
+  --font-sans: var(--tb-font-sans);
+  --font-display: var(--tb-font-display);
+  --font-mono: var(--tb-font-mono);
+  --text-display: var(--tb-text-display);
+  --text-title: var(--tb-text-title);
+  --tracking-hug: var(--tb-tracking-tight);
+
+  --ease-spring: var(--tb-ease-spring);
+  --ease-glide: var(--tb-ease-out);
+  --duration-fast: var(--tb-dur-fast);
+  --duration-base: var(--tb-dur-base);
+  --duration-slow: var(--tb-dur-slow);
+
+  --shadow-glow: var(--tb-glow-accent);
+  --shadow-glow-soft: var(--tb-glow-soft);
+  --shadow-raised: var(--tb-shadow-raised);
+
+  --animate-drawer-in: tb-drawer-in var(--tb-dur-base) var(--tb-ease-spring);
+  --animate-pop-in: tb-pop-in var(--tb-dur-base) var(--tb-ease-spring);
+  --animate-fade-in: tb-fade-in var(--tb-dur-base) var(--tb-ease-out);
+
+  @keyframes tb-drawer-in {
+    from {
+      transform: translateX(12%);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
+    }
+  }
+  @keyframes tb-pop-in {
+    from {
+      transform: scale(0.96) translateY(2%);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
+    }
+  }
+  @keyframes tb-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+body {
+  background: var(--tb-surface-0);
+  color: var(--tb-text-hi);
+  font-family: var(--tb-font-sans);
+  min-height: 100dvh;
+}
+
+/* Token-driven focus ring, applied globally for keyboard users. */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--tb-glow-focus);
+  border-radius: var(--tb-radius-sm);
+}
+
+::selection {
+  background: var(--tb-accent);
+  color: var(--tb-accent-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+}
