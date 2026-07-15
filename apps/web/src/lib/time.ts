@@ -1,5 +1,7 @@
 /* Date/time helpers. The API speaks ISO-8601 UTC with a Z suffix. */
 
+import { date_ymd_pattern, time_hhmm_pattern } from "./patterns";
+
 export const day_start_hour = 6;
 export const day_end_hour = 24;
 export const visible_hours = day_end_hour - day_start_hour;
@@ -114,6 +116,31 @@ export function iso_to_local_input(iso: string): string {
 
 export function local_input_to_iso(value: string): string {
   const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+/* --------------------------------------------- <input type=date / time> */
+
+/** "YYYY-MM-DD" (local wall-clock date) for an ISO instant. */
+export function date_input_value(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+/** "HH:MM" (local wall-clock time) for an ISO instant. */
+export function time_input_value(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+/** Combine a "YYYY-MM-DD" date and "HH:MM" time (local) into an ISO instant. */
+export function compose_local_iso(date_str: string, time_str: string): string {
+  if (!date_ymd_pattern.test(date_str) || !time_hhmm_pattern.test(time_str)) {
+    return "";
+  }
+  const date = new Date(`${date_str}T${time_str}`);
   return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
 

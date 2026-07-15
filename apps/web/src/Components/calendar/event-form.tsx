@@ -51,22 +51,34 @@ function TypeAttentionRow({ draft, on_change }: FieldsProps) {
   );
 }
 
+function DateRow({ draft, errors, on_change }: FieldsProps) {
+  return (
+    <TextField
+      label="Date"
+      type="date"
+      value={draft.date_local}
+      error={errors["date_local"]}
+      onChange={(event) => on_change({ date_local: event.target.value })}
+    />
+  );
+}
+
 function TimesRow({ draft, errors, on_change }: FieldsProps) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <TextField
         label="Starts"
-        type="datetime-local"
-        value={draft.start_local}
-        error={errors["start_at"]}
-        onChange={(event) => on_change({ start_local: event.target.value })}
+        type="time"
+        value={draft.start_time}
+        error={errors["start_time"]}
+        onChange={(event) => on_change({ start_time: event.target.value })}
       />
       <TextField
         label="Ends"
-        type="datetime-local"
-        value={draft.end_local}
-        error={errors["end_at"]}
-        onChange={(event) => on_change({ end_local: event.target.value })}
+        type="time"
+        value={draft.end_time}
+        error={errors["end_time"]}
+        onChange={(event) => on_change({ end_time: event.target.value })}
       />
     </div>
   );
@@ -85,6 +97,7 @@ export function EventFormFields(props: FieldsProps) {
         onChange={(event) => on_change({ title: event.target.value })}
       />
       <TypeAttentionRow {...props} />
+      <DateRow {...props} />
       <TimesRow {...props} />
       <TextField
         label="Estimated minutes"
