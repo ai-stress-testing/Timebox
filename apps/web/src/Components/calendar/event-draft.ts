@@ -16,8 +16,9 @@ import {
  * String-typed form state for the event drawer. The target date is a single
  * field shared by start and end (most events happen within one day); start
  * and end are time-only unless `is_all_day` is set, in which case the time
- * fields are ignored and the whole day is boxed. Kept extensible for an
- * upcoming repeats section.
+ * fields are ignored and the whole day is boxed. `repeats`/`repeat_weekdays`/
+ * `repeat_until` back the weekly-by-weekday repeats section — `repeat_until`
+ * is a "YYYY-MM-DD" date string, "" meaning open-ended.
  */
 export type EventDraft = {
   title: string;
@@ -30,6 +31,9 @@ export type EventDraft = {
   estimated_minutes: string;
   description: string;
   status: EventStatus;
+  repeats: boolean;
+  repeat_weekdays: number[];
+  repeat_until: string;
 };
 
 export function draft_from_slot(start: Date): EventDraft {
@@ -45,6 +49,9 @@ export function draft_from_slot(start: Date): EventDraft {
     estimated_minutes: "",
     description: "",
     status: "scheduled",
+    repeats: false,
+    repeat_weekdays: [],
+    repeat_until: "",
   };
 }
 
@@ -69,6 +76,9 @@ export function draft_from_event(event: CalendarEvent): EventDraft {
       event.estimated_minutes == null ? "" : String(event.estimated_minutes),
     description: event.description ?? "",
     status: event.status,
+    repeats: event.is_recurring ?? false,
+    repeat_weekdays: event.recurrence_weekdays ?? [],
+    repeat_until: event.recurrence_end ? date_input_value(event.recurrence_end) : "",
   };
 }
 
@@ -80,6 +90,8 @@ export type DraftBuildResult =
 const error_field_overrides: Record<string, string> = {
   start_at: "start_time",
   end_at: "end_time",
+  recurrence_weekdays: "repeat_weekdays",
+  recurrence_end: "repeat_until",
 };
 
 /** Start/end ISO instants for the draft's temporal fields. */
@@ -96,6 +108,17 @@ function draft_span(draft: EventDraft): { start_at: string; end_at: string } {
   };
 }
 
+/** Repeats fields, included only while `repeats` is on (see build_event_create). */
+function draft_repeats(draft: EventDraft): Partial<EventCreate> {
+  if (!draft.repeats) return {};
+  const until = draft.repeat_until.trim();
+  return {
+    is_recurring: true,
+    recurrence_weekdays: draft.repeat_weekdays,
+    ...(until === "" ? {} : { recurrence_end: compose_local_iso(until, "23:59") }),
+  };
+}
+
 /** Validate the draft with zod and produce the EventCreate payload. */
 export function build_event_create(draft: EventDraft): DraftBuildResult {
   const estimated = draft.estimated_minutes.trim();
@@ -109,6 +132,7 @@ export function build_event_create(draft: EventDraft): DraftBuildResult {
     ...(draft.description.trim() === ""
       ? {}
       : { description: draft.description.trim() }),
+    ...draft_repeats(draft),
   };
   const parsed = event_create_schema.safeParse(candidate);
   if (parsed.success) return { ok: true, value: parsed.data };

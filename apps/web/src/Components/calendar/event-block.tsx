@@ -30,6 +30,9 @@ export function EventBlock({ event, day, on_select }: EventBlockProps) {
         hover:shadow-glow-soft ${is_done ? "opacity-50" : ""}`}
     >
       <span className="block truncate text-xs font-semibold text-hi">
+        {event.is_recurring ? (
+          <span aria-label="repeats" title="Repeats">↻ </span>
+        ) : null}
         {is_done ? <s>{event.title}</s> : event.title}
       </span>
       <span className="block truncate text-xs text-mid">

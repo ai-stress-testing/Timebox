@@ -61,7 +61,12 @@ function DayColumn({ day, events, on_slot, on_event }: {
           />
         ))}
         {events.map((event) => (
-          <EventBlock key={event.id} event={event} day={day} on_select={on_event} />
+          <EventBlock
+            key={`${event.id}:${event.start_at}`}
+            event={event}
+            day={day}
+            on_select={on_event}
+          />
         ))}
       </div>
     </div>

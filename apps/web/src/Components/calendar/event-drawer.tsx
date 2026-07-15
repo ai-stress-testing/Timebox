@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { CalendarEvent } from "../../lib/api-schemas";
+import type { CalendarEvent, EventCreate, EventPatch } from "../../lib/api-schemas";
 import { canvas_badge_labels } from "../../lib/dispatch-maps/canvas-badges";
 import {
   use_create_event,
@@ -25,6 +25,13 @@ function initial_draft(target: DrawerTarget): EventDraft {
     : draft_from_event(target.event);
 }
 
+/** Recurrence editing is out of scope for the patch endpoint (issue #2) —
+ * strip those fields so editing an occurrence's other fields doesn't 422. */
+function to_patch(payload: EventCreate): EventPatch {
+  const { is_recurring: _r, recurrence_weekdays: _w, recurrence_end: _e, ...patch } = payload;
+  return patch;
+}
+
 export function EventDrawer({ target, on_close }: EventDrawerProps) {
   const [draft, set_draft] = useState<EventDraft>(() => initial_draft(target));
   const [errors, set_errors] = useState<Record<string, string>>({});
@@ -43,8 +50,11 @@ export function EventDrawer({ target, on_close }: EventDrawerProps) {
       return;
     }
     try {
-      if (is_edit) await update.mutateAsync({ id: target.event.id, patch: built.value });
-      else await create.mutateAsync(built.value);
+      if (is_edit) {
+        await update.mutateAsync({ id: target.event.id, patch: to_patch(built.value) });
+      } else {
+        await create.mutateAsync(built.value);
+      }
       push_toast(is_edit ? "Event updated." : "Event created.", "ok");
       on_close();
     } catch (cause) {

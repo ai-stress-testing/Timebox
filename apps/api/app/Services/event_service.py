@@ -1,5 +1,6 @@
 """Event service — CRUD with encryption at rest and canvas-type auto-assignment."""
-from datetime import datetime
+import json
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,6 +8,7 @@ from app.Core import crypto
 from app.dispatch_maps.canvas_type import assign_canvas_type
 from app.Models.base import utc_now
 from app.Models.event import Event
+from app.Pipelines.recurrence import Occurrence, expand_occurrences
 from app.Repositories import calendar_repo, event_repo
 from app.Schemas.base import (
     AttentionClass,
@@ -25,11 +27,25 @@ class EventError(Exception):
         self.detail = detail
 
 
+def _naive_utc(value: datetime) -> datetime:
+    """DB columns and the recurrence pipeline store/compare naive UTC — FastAPI's
+    Query() path can hand back a tz-aware instant even though `UtcDateTime`
+    normalizes JSON body fields; normalize defensively at this boundary too.
+    """
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def _decrypt_optional(data_key: bytes, payload: str | None) -> str | None:
     return crypto.decrypt_field(data_key, payload) if payload is not None else None
 
 
 def to_out(event: Event, data_key: bytes) -> EventOut:
+    """Map a stored row (master or plain event) to its own DTO — never an
+    occurrence: `master_event_id`/`occurrence_date` are the virtual-instance
+    markers and are always None here.
+    """
     return EventOut(
         id=event.id,
         calendar_id=event.calendar_id,
@@ -46,9 +62,71 @@ def to_out(event: Event, data_key: bytes) -> EventOut:
         estimated_minutes=event.estimated_minutes,
         actual_minutes=event.actual_minutes,
         residual_of=event.residual_of,
+        is_recurring=event.is_recurring,
+        recurrence_weekdays=json.loads(event.recurrence_weekdays),
+        recurrence_end=event.recurrence_end,
+        master_event_id=None,
+        occurrence_date=None,
         created_at=event.created_at,
         updated_at=event.updated_at,
     )
+
+
+def _occurrence_out(
+    master: Event,
+    occurrence: Occurrence,
+    title: str,
+    description: str | None,
+    location: str | None,
+) -> EventOut:
+    """A virtual occurrence DTO: shares the master's `id` (edit/delete target
+    the master row) but carries its own start/end and a distinct identity via
+    `master_event_id` + `occurrence_date` — the seam issue #4 (delete this vs
+    all-future) hangs off of.
+    """
+    return EventOut(
+        id=master.id,
+        calendar_id=master.calendar_id,
+        title=title,
+        description=description,
+        location=location,
+        event_type=EventType(master.event_type),
+        attention_class=AttentionClass(master.attention_class),
+        canvas_event_type=CanvasEventType(master.canvas_event_type or "focus_only"),
+        status=EventStatus(master.status),
+        start_at=occurrence.start_at,
+        end_at=occurrence.end_at,
+        is_all_day=master.is_all_day,
+        estimated_minutes=master.estimated_minutes,
+        actual_minutes=master.actual_minutes,
+        residual_of=master.residual_of,
+        is_recurring=master.is_recurring,
+        recurrence_weekdays=json.loads(master.recurrence_weekdays),
+        recurrence_end=master.recurrence_end,
+        master_event_id=master.id,
+        occurrence_date=occurrence.occurrence_date.isoformat(),
+        created_at=master.created_at,
+        updated_at=master.updated_at,
+    )
+
+
+def _expand_master(
+    master: Event, data_key: bytes, window_start: datetime, window_end: datetime
+) -> list[EventOut]:
+    """Decrypt the master's sensitive fields once, then emit one EventOut per
+    occurrence in the window. The master row itself is never emitted.
+    """
+    weekdays = frozenset(json.loads(master.recurrence_weekdays))
+    occurrences = expand_occurrences(
+        master.start_at, master.end_at, weekdays, master.recurrence_end, window_start, window_end
+    )
+    title = crypto.decrypt_field(data_key, master.title_enc)
+    description = _decrypt_optional(data_key, master.description_enc)
+    location = _decrypt_optional(data_key, master.location_enc)
+    return [
+        _occurrence_out(master, occurrence, title, description, location)
+        for occurrence in occurrences
+    ]
 
 
 async def _reassign_one(session: AsyncSession, event: Event) -> None:
@@ -125,6 +203,9 @@ async def create_event(
         end_at=payload.end_at,
         is_all_day=payload.is_all_day,
         estimated_minutes=payload.estimated_minutes,
+        is_recurring=payload.is_recurring,
+        recurrence_weekdays=json.dumps(payload.recurrence_weekdays),
+        recurrence_end=payload.recurrence_end,
     )
     event_repo.add_event(session, event)
     await session.flush()
@@ -137,8 +218,19 @@ async def create_event(
 async def list_events(
     session: AsyncSession, user_id: str, data_key: bytes, start_at: datetime, end_at: datetime
 ) -> list[EventOut]:
-    events = await event_repo.list_in_range(session, user_id, start_at, end_at)
-    return [to_out(event, data_key) for event in events]
+    """Non-recurring rows pass through as-is; recurring masters expand into
+    one EventOut per occurrence inside [start_at, end_at) (sparse, virtual —
+    see `_expand_master`). Deterministic for identical inputs.
+    """
+    window_start, window_end = _naive_utc(start_at), _naive_utc(end_at)
+    events = await event_repo.list_for_window(session, user_id, window_start, window_end)
+    out: list[EventOut] = []
+    for event in events:
+        if event.is_recurring:
+            out.extend(_expand_master(event, data_key, window_start, window_end))
+        else:
+            out.append(to_out(event, data_key))
+    return out
 
 
 async def get_event(

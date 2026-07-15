@@ -1,5 +1,5 @@
 """Event schemas — canvas_event_type is server-assigned, never client-set."""
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.Schemas.base import (
     ApiModel,
@@ -11,6 +11,9 @@ from app.Schemas.base import (
     EventTypeField,
     UtcDateTime,
 )
+
+# Weekday convention shared with chores: Sun=0 .. Sat=6 (see Schemas/chore.py).
+_WEEKDAY_RANGE = range(0, 7)
 
 
 class EventCreate(ApiModel):
@@ -24,11 +27,24 @@ class EventCreate(ApiModel):
     end_at: UtcDateTime
     is_all_day: bool = False
     estimated_minutes: int | None = Field(default=None, gt=0, le=24 * 60)
+    is_recurring: bool = False
+    recurrence_weekdays: list[int] = Field(default_factory=list, max_length=7)
+    recurrence_end: UtcDateTime | None = None
+
+    @field_validator("recurrence_weekdays")
+    @classmethod
+    def check_weekdays(cls, days: list[int]) -> list[int]:
+        invalid = [d for d in days if d not in _WEEKDAY_RANGE]
+        if invalid:
+            raise ValueError("recurrence_weekdays must be 0 (Sun) through 6 (Sat)")
+        return sorted(set(days))
 
     @model_validator(mode="after")
     def check_range(self) -> "EventCreate":
         if self.end_at <= self.start_at:
             raise ValueError("end_at must be after start_at")
+        if self.is_recurring and not self.recurrence_weekdays:
+            raise ValueError("recurrence_weekdays must be non-empty when is_recurring")
         return self
 
 
@@ -62,5 +78,10 @@ class EventOut(ApiModel):
     estimated_minutes: int | None
     actual_minutes: int | None
     residual_of: str | None
+    is_recurring: bool
+    recurrence_weekdays: list[int]
+    recurrence_end: UtcDateTime | None
+    master_event_id: str | None
+    occurrence_date: str | None
     created_at: UtcDateTime
     updated_at: UtcDateTime

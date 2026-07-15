@@ -28,6 +28,7 @@ function AllDayChip({ event, on_event }: {
         transition-transform duration-(--tb-dur-fast) ease-spring
         hover:scale-[1.02] hover:shadow-glow-soft"
     >
+      {event.is_recurring ? <span aria-label="repeats" title="Repeats">↻ </span> : null}
       {event.title}
     </button>
   );
@@ -41,7 +42,7 @@ function AllDayDayCell({ day, events, on_event }: {
   return (
     <div className="flex min-w-0 flex-col gap-1 border-l border-edge px-1 py-1">
       {events_for_day(events, day).map((event) => (
-        <AllDayChip key={event.id} event={event} on_event={on_event} />
+        <AllDayChip key={`${event.id}:${event.start_at}`} event={event} on_event={on_event} />
       ))}
     </div>
   );

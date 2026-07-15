@@ -6,6 +6,7 @@ import {
 } from "../../lib/dispatch-maps/labels";
 import { CheckboxField, SelectField, TextAreaField, TextField } from "../ui/field";
 import type { EventDraft } from "./event-draft";
+import { WeekdayToggles } from "./weekday-toggles";
 
 type FieldsProps = {
   draft: EventDraft;
@@ -94,6 +95,45 @@ function TimesRow({ draft, errors, on_change }: FieldsProps) {
   );
 }
 
+function RepeatsRow({ draft, on_change }: FieldsProps) {
+  return (
+    <CheckboxField
+      label="Repeats weekly"
+      checked={draft.repeats}
+      onChange={(event) => on_change({ repeats: event.target.checked })}
+    />
+  );
+}
+
+function RepeatsDetail({ draft, errors, on_change }: FieldsProps) {
+  const toggle_weekday = (value: number) => {
+    const has_day = draft.repeat_weekdays.includes(value);
+    const next = has_day
+      ? draft.repeat_weekdays.filter((day) => day !== value)
+      : [...draft.repeat_weekdays, value];
+    on_change({ repeat_weekdays: next });
+  };
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-edge p-3">
+      <WeekdayToggles
+        label="Repeats on"
+        selected={draft.repeat_weekdays}
+        on_toggle={toggle_weekday}
+      />
+      {errors["repeat_weekdays"] ? (
+        <p role="alert" className="text-xs text-danger">{errors["repeat_weekdays"]}</p>
+      ) : null}
+      <TextField
+        label="Until (optional)"
+        type="date"
+        value={draft.repeat_until}
+        error={errors["repeat_until"]}
+        onChange={(event) => on_change({ repeat_until: event.target.value })}
+      />
+    </div>
+  );
+}
+
 /** The shared field set for create + edit event drawers. */
 export function EventFormFields(props: FieldsProps) {
   const { draft, errors, on_change } = props;
@@ -110,6 +150,8 @@ export function EventFormFields(props: FieldsProps) {
       <DateRow {...props} />
       <AllDayRow {...props} />
       {draft.is_all_day ? null : <TimesRow {...props} />}
+      <RepeatsRow {...props} />
+      {draft.repeats ? <RepeatsDetail {...props} /> : null}
       <TextField
         label="Estimated minutes"
         type="number"

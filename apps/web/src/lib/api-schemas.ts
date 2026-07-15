@@ -136,11 +136,21 @@ export const event_create_schema = z
     end_at: z.string().min(1, "End time is required"),
     is_all_day: z.boolean().optional(),
     estimated_minutes: z.number().int().positive().optional(),
+    is_recurring: z.boolean().optional(),
+    recurrence_weekdays: z.array(z.number().int().min(0).max(6)).optional(),
+    recurrence_end: z.string().optional(),
   })
   .refine((value) => value.end_at > value.start_at, {
     message: "End must be after start",
     path: ["end_at"],
-  });
+  })
+  .refine(
+    (value) => !value.is_recurring || (value.recurrence_weekdays?.length ?? 0) > 0,
+    {
+      message: "Pick at least one day",
+      path: ["recurrence_weekdays"],
+    },
+  );
 export type EventCreate = z.infer<typeof event_create_schema>;
 
 export const event_schema = z.object({
@@ -159,6 +169,11 @@ export const event_schema = z.object({
   status: event_status_schema,
   actual_minutes: z.number().nullable(),
   residual_of: z.string().nullable(),
+  is_recurring: z.boolean().nullish(),
+  recurrence_weekdays: z.array(z.number()).nullish(),
+  recurrence_end: z.string().nullable(),
+  master_event_id: z.string().nullable(),
+  occurrence_date: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });
