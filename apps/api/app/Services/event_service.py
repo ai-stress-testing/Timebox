@@ -320,6 +320,8 @@ def _apply_plain_fields(event: Event, payload: EventPatch) -> None:
         event.is_all_day = payload.is_all_day
     if payload.estimated_minutes is not None:
         event.estimated_minutes = payload.estimated_minutes
+    if payload.actual_minutes is not None:
+        event.actual_minutes = payload.actual_minutes
 
 
 def _apply_encrypted_fields(event: Event, payload: EventPatch, data_key: bytes) -> None:

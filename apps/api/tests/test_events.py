@@ -376,3 +376,23 @@ async def test_title_suggestions_group_and_average(unlocked) -> None:
     assert by_title["Dentist"]["occurrence_count"] == 1
     # most frequent first
     assert res.json()[0]["title"] == "Gym"
+
+
+async def test_patch_actual_minutes_and_move(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_event_payload(), headers=headers)
+    event_id = created.json()["id"]
+
+    logged = await client.patch(
+        f"/events/{event_id}", json={"actual_minutes": 42}, headers=headers
+    )
+    assert logged.status_code == 200
+    assert logged.json()["actual_minutes"] == 42
+
+    # move to tomorrow: shift start/end +1 day
+    moved = await client.patch(
+        f"/events/{event_id}",
+        json={"start_at": "2026-07-15T09:00:00Z", "end_at": "2026-07-15T10:30:00Z"},
+        headers=headers,
+    )
+    assert moved.json()["start_at"] == "2026-07-15T09:00:00Z"

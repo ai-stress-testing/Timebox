@@ -60,6 +60,7 @@ class EventPatch(ApiModel):
     end_at: UtcDateTime | None = None
     is_all_day: bool | None = None
     estimated_minutes: int | None = Field(default=None, gt=0, le=24 * 60)
+    actual_minutes: int | None = Field(default=None, ge=0, le=24 * 60)
 
 
 class EventOut(ApiModel):

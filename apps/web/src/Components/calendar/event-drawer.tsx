@@ -18,6 +18,7 @@ import type { DeleteScopeChoice } from "./delete-scope-dialog";
 import { build_event_create, draft_from_event, draft_from_slot } from "./event-draft";
 import type { EventDraft } from "./event-draft";
 import { EventFormFields } from "./event-form";
+import { EventQuickActions } from "./event-quick-actions";
 
 export type DrawerTarget = { kind: "create"; start: Date } | { kind: "edit"; event: CalendarEvent };
 
@@ -117,6 +118,9 @@ export function EventDrawer({ target, on_close }: EventDrawerProps) {
             on_change={(patch) => set_draft((current) => ({ ...current, ...patch }))}
             title_suggestions={titles.data ?? []}
           />
+          {is_edit && !target.event.is_recurring ? (
+            <EventQuickActions event={target.event} on_done={on_close} />
+          ) : null}
           <div className="flex items-center justify-between gap-3">
             {is_edit ? (
               <Button variant="danger" disabled={busy} onClick={handle_delete}>

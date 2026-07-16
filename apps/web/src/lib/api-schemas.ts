@@ -188,7 +188,10 @@ export const event_title_suggestion_schema = z.object({
 export const event_title_suggestion_list_schema = z.array(event_title_suggestion_schema);
 export type EventTitleSuggestion = z.infer<typeof event_title_suggestion_schema>;
 
-export type EventPatch = Partial<EventCreate> & { status?: EventStatus };
+export type EventPatch = Partial<EventCreate> & {
+  status?: EventStatus;
+  actual_minutes?: number;
+};
 
 /* --------------------------------------------------------------- chores */
 
