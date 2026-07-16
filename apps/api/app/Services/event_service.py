@@ -19,7 +19,7 @@ from app.Schemas.base import (
     EventStatus,
     EventType,
 )
-from app.Schemas.event import EventCreate, EventOut, EventPatch
+from app.Schemas.event import EventCreate, EventOut, EventPatch, EventTitleSuggestion
 from app.Services.calendar_service import ensure_default_calendar
 
 DeleteScope = Literal["all", "occurrence", "following"]
@@ -255,6 +255,54 @@ async def get_event(
     if event is None:
         raise EventError(404, "event not found")
     return to_out(event, data_key)
+
+
+_TITLE_SCAN_LIMIT = 500
+_TITLE_SUGGESTION_LIMIT = 50
+
+
+def _event_minutes(event: Event) -> int | None:
+    """Best available duration signal: logged actual, else estimate, else the
+    scheduled span. All-day events carry no meaningful minutes.
+    """
+    if event.is_all_day:
+        return None
+    if event.actual_minutes is not None:
+        return event.actual_minutes
+    if event.estimated_minutes is not None:
+        return event.estimated_minutes
+    return max(1, round((event.end_at - event.start_at).total_seconds() / 60))
+
+
+async def title_suggestions(
+    session: AsyncSession, user_id: str, data_key: bytes
+) -> list[EventTitleSuggestion]:
+    """Group the user's recent events by (decrypted) title into autocomplete
+    entries with a count and average duration — the datalist that lets an
+    irregular-but-recurring event be re-entered with its learned duration.
+    """
+    events = await event_repo.list_recent_for_titles(session, user_id, _TITLE_SCAN_LIMIT)
+    counts: dict[str, int] = {}
+    minute_totals: dict[str, list[int]] = {}
+    for event in events:
+        title = crypto.decrypt_field(data_key, event.title_enc)
+        counts[title] = counts.get(title, 0) + 1
+        minutes = _event_minutes(event)
+        if minutes is not None:
+            minute_totals.setdefault(title, []).append(minutes)
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [
+        EventTitleSuggestion(
+            title=title,
+            occurrence_count=count,
+            avg_minutes=_mean_minutes(minute_totals.get(title, [])),
+        )
+        for title, count in ranked[:_TITLE_SUGGESTION_LIMIT]
+    ]
+
+
+def _mean_minutes(values: list[int]) -> int | None:
+    return round(sum(values) / len(values)) if values else None
 
 
 def _apply_plain_fields(event: Event, payload: EventPatch) -> None:

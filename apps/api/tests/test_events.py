@@ -347,3 +347,32 @@ async def test_recurring_event_listing_is_deterministic(unlocked) -> None:
     first = await client.get("/events", params=_WEEK, headers=headers)
     second = await client.get("/events", params=_WEEK, headers=headers)
     assert first.json() == second.json()
+
+
+async def test_title_suggestions_group_and_average(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    # two "Gym" events with estimated durations, one "Dentist"
+    for start, end, mins in [
+        ("2026-07-14T07:00:00Z", "2026-07-14T08:00:00Z", 60),
+        ("2026-07-16T07:00:00Z", "2026-07-16T08:30:00Z", 90),
+    ]:
+        await client.post(
+            "/events",
+            json={"title": "Gym", "event_type": "physical", "attention_class": "involved",
+                  "start_at": start, "end_at": end, "estimated_minutes": mins},
+            headers=headers,
+        )
+    await client.post(
+        "/events",
+        json=_event_payload(title="Dentist", start_at="2026-07-15T09:00:00Z",
+                            end_at="2026-07-15T09:30:00Z"),
+        headers=headers,
+    )
+    res = await client.get("/events/titles", headers=headers)
+    assert res.status_code == 200, res.text
+    by_title = {row["title"]: row for row in res.json()}
+    assert by_title["Gym"]["occurrence_count"] == 2
+    assert by_title["Gym"]["avg_minutes"] == 75  # (60 + 90) / 2
+    assert by_title["Dentist"]["occurrence_count"] == 1
+    # most frequent first
+    assert res.json()[0]["title"] == "Gym"

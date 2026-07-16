@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api_request, api_request_empty } from "../Services/api-client";
-import { event_list_schema, event_schema } from "../lib/api-schemas";
+import {
+  event_list_schema,
+  event_schema,
+  event_title_suggestion_list_schema,
+} from "../lib/api-schemas";
 import type { EventCreate, EventPatch } from "../lib/api-schemas";
 
 const events_key = ["events"] as const;
@@ -10,6 +14,14 @@ export function use_events_range(start_iso: string, end_iso: string) {
   return useQuery({
     queryKey: [...events_key, start_iso, end_iso],
     queryFn: () => api_request(`/events?${search}`, event_list_schema),
+  });
+}
+
+export function use_event_titles() {
+  return useQuery({
+    queryKey: [...events_key, "titles"],
+    queryFn: () => api_request("/events/titles", event_title_suggestion_list_schema),
+    staleTime: 60_000,
   });
 }
 

@@ -85,3 +85,12 @@ class EventOut(ApiModel):
     occurrence_date: str | None
     created_at: UtcDateTime
     updated_at: UtcDateTime
+
+
+class EventTitleSuggestion(ApiModel):
+    """One autocomplete entry: a title the user has used before, how often,
+    and the typical duration (learned from prior events of that title).
+    """
+    title: str
+    occurrence_count: int
+    avg_minutes: int | None

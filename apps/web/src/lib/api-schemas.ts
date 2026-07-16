@@ -180,6 +180,14 @@ export const event_schema = z.object({
 export const event_list_schema = z.array(event_schema);
 export type CalendarEvent = z.infer<typeof event_schema>;
 
+export const event_title_suggestion_schema = z.object({
+  title: z.string(),
+  occurrence_count: z.number(),
+  avg_minutes: z.number().nullable(),
+});
+export const event_title_suggestion_list_schema = z.array(event_title_suggestion_schema);
+export type EventTitleSuggestion = z.infer<typeof event_title_suggestion_schema>;
+
 export type EventPatch = Partial<EventCreate> & { status?: EventStatus };
 
 /* --------------------------------------------------------------- chores */

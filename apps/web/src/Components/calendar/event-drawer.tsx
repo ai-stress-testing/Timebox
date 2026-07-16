@@ -4,6 +4,7 @@ import { canvas_badge_labels } from "../../lib/dispatch-maps/canvas-badges";
 import {
   use_create_event,
   use_delete_event,
+  use_event_titles,
   use_update_event,
 } from "../../Hooks/use-events";
 import type { DeleteScope } from "../../Hooks/use-events";
@@ -42,6 +43,7 @@ export function EventDrawer({ target, on_close }: EventDrawerProps) {
   const create = use_create_event();
   const update = use_update_event();
   const remove = use_delete_event();
+  const titles = use_event_titles();
   const busy = create.isPending || update.isPending || remove.isPending;
   const is_edit = target.kind === "edit";
   const idle_label = is_edit ? "Save changes" : "Create event";
@@ -113,6 +115,7 @@ export function EventDrawer({ target, on_close }: EventDrawerProps) {
             draft={draft}
             errors={errors}
             on_change={(patch) => set_draft((current) => ({ ...current, ...patch }))}
+            title_suggestions={titles.data ?? []}
           />
           <div className="flex items-center justify-between gap-3">
             {is_edit ? (

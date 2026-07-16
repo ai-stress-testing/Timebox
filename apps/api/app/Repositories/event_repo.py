@@ -88,6 +88,23 @@ async def list_overlapping(
     return [event for event in overlapping if event.id != exclude_id]
 
 
+async def list_recent_for_titles(
+    session: AsyncSession, user_id: str, limit: int
+) -> list[Event]:
+    """Most recent live events, for building the title autocomplete/datalist.
+    Bounded (NASA rule 2) — grouping/decryption happens in the service layer
+    since titles are encrypted at rest and cannot be GROUP BY'd in SQL.
+    """
+    stmt = (
+        select(Event)
+        .where(Event.user_id == user_id, Event.deleted_at.is_(None))
+        .order_by(Event.start_at.desc())
+        .limit(limit)
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars())
+
+
 async def get_event(session: AsyncSession, user_id: str, event_id: str) -> Event | None:
     stmt = select(Event).where(
         Event.id == event_id,

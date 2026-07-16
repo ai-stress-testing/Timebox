@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.Core.database import get_session
 from app.Routers.deps import SessionContext, get_session_context
 from app.Schemas.base import UtcDateTime
-from app.Schemas.event import EventCreate, EventOut, EventPatch
+from app.Schemas.event import EventCreate, EventOut, EventPatch, EventTitleSuggestion
 from app.Services import event_service
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -21,6 +21,15 @@ async def list_events(
     db: AsyncSession = Depends(get_session),
 ) -> list[EventOut]:
     return await event_service.list_events(db, ctx.user_id, ctx.data_key, start, end)
+
+
+# Declared before /{event_id} so "titles" is not captured as an event id.
+@router.get("/titles", response_model=list[EventTitleSuggestion])
+async def list_title_suggestions(
+    ctx: SessionContext = Depends(get_session_context),
+    db: AsyncSession = Depends(get_session),
+) -> list[EventTitleSuggestion]:
+    return await event_service.title_suggestions(db, ctx.user_id, ctx.data_key)
 
 
 @router.post("", response_model=EventOut, status_code=201)

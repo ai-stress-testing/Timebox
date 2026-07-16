@@ -4,6 +4,7 @@ import {
   event_type_labels,
   event_type_options,
 } from "../../lib/dispatch-maps/labels";
+import type { EventTitleSuggestion } from "../../lib/api-schemas";
 import { CheckboxField, SelectField, TextAreaField, TextField } from "../ui/field";
 import type { EventDraft } from "./event-draft";
 import { WeekdayToggles } from "./weekday-toggles";
@@ -12,7 +13,47 @@ type FieldsProps = {
   draft: EventDraft;
   errors: Record<string, string>;
   on_change: (patch: Partial<EventDraft>) => void;
+  title_suggestions?: EventTitleSuggestion[];
 };
+
+const title_datalist_id = "event-title-options";
+
+/** Typing a known title prefills estimated minutes with its learned average —
+ * but only when that field is still empty, never overwriting real input. */
+function title_change_patch(
+  value: string,
+  draft: EventDraft,
+  suggestions: EventTitleSuggestion[],
+): Partial<EventDraft> {
+  const match = suggestions.find((suggestion) => suggestion.title === value);
+  const can_prefill = match?.avg_minutes != null && draft.estimated_minutes.trim() === "";
+  return can_prefill
+    ? { title: value, estimated_minutes: String(match.avg_minutes) }
+    : { title: value };
+}
+
+function TitleRow({ draft, errors, on_change, title_suggestions = [] }: FieldsProps) {
+  return (
+    <>
+      <TextField
+        label="Title"
+        value={draft.title}
+        error={errors["title"]}
+        placeholder="What are you timeboxing?"
+        list={title_datalist_id}
+        autoComplete="off"
+        onChange={(event) =>
+          on_change(title_change_patch(event.target.value, draft, title_suggestions))
+        }
+      />
+      <datalist id={title_datalist_id}>
+        {title_suggestions.map((suggestion) => (
+          <option key={suggestion.title} value={suggestion.title} />
+        ))}
+      </datalist>
+    </>
+  );
+}
 
 function TypeAttentionRow({ draft, on_change }: FieldsProps) {
   return (
@@ -139,13 +180,7 @@ export function EventFormFields(props: FieldsProps) {
   const { draft, errors, on_change } = props;
   return (
     <div className="flex flex-col gap-4">
-      <TextField
-        label="Title"
-        value={draft.title}
-        error={errors["title"]}
-        placeholder="What are you timeboxing?"
-        onChange={(event) => on_change({ title: event.target.value })}
-      />
+      <TitleRow {...props} />
       <TypeAttentionRow {...props} />
       <DateRow {...props} />
       <AllDayRow {...props} />
