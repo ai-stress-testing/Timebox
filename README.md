@@ -38,9 +38,9 @@ specs/          spec-kit feature specs (spec / plan / tasks)
 - **Python ≥ 3.11** (3.12 recommended) — SQLite ships bundled with CPython, no extra install.
 - **Node ≥ 20** and **npm** (bundled with Node).
 - **uv** (optional) — fast venv/installer; the setup falls back to `python -m venv` + `pip` if absent.
-- **Ollama** (optional) — only for AI timeboxing; the calendar works fully without it. Set `TIMEBOX_OLLAMA_BASE_URL` / `TIMEBOX_OLLAMA_MODEL`.
+- **Ollama** (optional) — only for AI timeboxing; the calendar works fully without it. See [Running Ollama](#running-ollama-the-ai-provider) below.
 - **OS**: Linux, macOS, or Windows (WSL2 recommended on Windows).
-- **Zero-prerequisite alternative**: Docker — `docker build -t timebox . && docker run -p 8787:8787 timebox`, then open `http://localhost:8787`. To reach a host Ollama add `-e TIMEBOX_OLLAMA_BASE_URL=http://host.docker.internal:11434 --add-host=host.docker.internal:host-gateway`.
+- **Zero-prerequisite alternative**: Docker — `docker build -t timebox . && docker run -p 8787:8787 timebox`, then open `http://localhost:8787`. To reach a host Ollama from the container, see [Docker + Ollama networking](#docker--reaching-your-hosts-ollama).
 
 One-command dev start: `./start.sh` boots both the API and web dev server.
 
@@ -63,6 +63,100 @@ ollama serve   # config: TIMEBOX_OLLAMA_BASE_URL, TIMEBOX_OLLAMA_MODEL (default 
 
 Tests: `cd apps/api && .venv/bin/python -m pytest` ·
 Web checks: `cd apps/web && npm run build`
+
+## Running Ollama (the AI provider)
+
+Ollama powers the optional **AI timebox** feature. Everything else works without
+it. Copy-paste to get it running for this instance:
+
+```bash
+# 1. Install Ollama — https://ollama.com/download
+#    macOS / Windows: download the app.   Linux:
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 2. Pull the model Timebox defaults to (or any model you prefer)
+ollama pull llama3.2
+
+# 3a. Timebox running from source (API on your host) — defaults just work:
+ollama serve                       # serves http://localhost:11434
+
+# 3b. Timebox running in Docker (API in a container) — Ollama MUST listen on
+#     all interfaces, or the container gets "connection refused":
+OLLAMA_HOST=0.0.0.0:11434 ollama serve
+
+# 4. Verify the daemon and model respond
+curl http://localhost:11434/api/tags
+```
+
+Then point Timebox at it — either way works:
+
+- **In the app**: open **Settings (⚙)**. Provider is already *Ollama*; set **Base
+  URL** (`http://localhost:11434`) and **Model** (e.g. `llama3.2`). The header's
+  status dot turns green when it connects. (You can also pick a different local
+  provider here — LM Studio or any OpenAI-compatible endpoint.)
+- **By env var**: `TIMEBOX_OLLAMA_BASE_URL` (default `http://localhost:11434`)
+  and `TIMEBOX_OLLAMA_MODEL` (default `llama3.2`) seed the defaults at startup.
+
+## Docker — reaching your host's Ollama
+
+Inside a container, `localhost` is the *container's* loopback, not your machine,
+so two things must line up:
+
+1. **Ollama must listen on all interfaces on the host** — not just `127.0.0.1`.
+   Start it with `OLLAMA_HOST=0.0.0.0:11434 ollama serve`. This is the #1 reason
+   a container can't reach a host Ollama: by default it binds to loopback only
+   and refuses the connection.
+2. **The container must be told where the host is** via `TIMEBOX_OLLAMA_BASE_URL`.
+
+**macOS / Windows** (Docker Desktop resolves `host.docker.internal` for you):
+
+```bash
+docker run -p 8787:8787 \
+  -e TIMEBOX_OLLAMA_BASE_URL=http://host.docker.internal:11434 \
+  -e TIMEBOX_OLLAMA_MODEL=llama3.2 \
+  timebox
+```
+
+**Linux** (add the host-gateway mapping so `host.docker.internal` resolves):
+
+```bash
+docker run -p 8787:8787 \
+  --add-host=host.docker.internal:host-gateway \
+  -e TIMEBOX_OLLAMA_BASE_URL=http://host.docker.internal:11434 \
+  -e TIMEBOX_OLLAMA_MODEL=llama3.2 \
+  timebox
+```
+
+**Linux, simplest** — share the host network stack so `localhost` just works
+(Linux only; no `-p` needed, the app is on `http://localhost:8787`):
+
+```bash
+docker run --network host \
+  -e TIMEBOX_OLLAMA_BASE_URL=http://localhost:11434 \
+  -e TIMEBOX_OLLAMA_MODEL=llama3.2 \
+  timebox
+```
+
+**Ollama in its own container** — put both on a user-defined network and address
+it by container name (no `OLLAMA_HOST`/host mapping needed):
+
+```bash
+docker network create timebox-net
+docker run -d --name ollama --network timebox-net -p 11434:11434 ollama/ollama
+docker exec ollama ollama pull llama3.2
+docker run -p 8787:8787 --network timebox-net \
+  -e TIMEBOX_OLLAMA_BASE_URL=http://ollama:11434 \
+  -e TIMEBOX_OLLAMA_MODEL=llama3.2 \
+  timebox
+```
+
+**Troubleshooting** — the header AI dot is red / "provider unreachable":
+
+- On the host: `curl http://localhost:11434/api/tags`. No response ⇒ Ollama
+  isn't running, or isn't bound to `0.0.0.0`.
+- From the container: `docker exec <id> wget -qO- http://host.docker.internal:11434/api/tags`.
+  Fails ⇒ the host mapping (Linux `--add-host`) or `OLLAMA_HOST` is the problem.
+- Everything but AI timeboxing works regardless — a red dot never blocks the app.
 
 ## Scaling path
 
