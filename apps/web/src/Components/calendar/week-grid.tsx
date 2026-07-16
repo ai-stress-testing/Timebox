@@ -23,7 +23,7 @@ const hour_rows = Array.from({ length: visible_hours }, (_, i) => day_start_hour
 function HourGutter() {
   return (
     <div aria-hidden="true">
-      <div className="h-8" />
+      <div className="sticky top-(--tb-header-height) z-30 h-8 border-b border-edge bg-surface-1" />
       {hour_rows.map((hour) => (
         <div key={hour} className="h-(--tb-hour-height) pr-2 text-right font-mono text-xs text-low">
           {format_hour_label(hour)}
@@ -43,7 +43,8 @@ function DayColumn({ day, events, on_slot, on_event }: {
   return (
     <div className="min-w-0 border-l border-edge">
       <div
-        className={`flex h-8 items-center justify-center text-xs font-semibold
+        className={`sticky top-(--tb-header-height) z-30 flex h-8 items-center
+          justify-center border-b border-edge bg-surface-1 text-xs font-semibold
           ${today ? "text-accent-2" : "text-mid"}`}
       >
         {format_day_label(day)}
@@ -86,7 +87,7 @@ function split_by_all_day(events: CalendarEvent[]): {
 export function WeekGrid({ range, events, on_slot, on_event }: WeekGridProps) {
   const { timed, all_day } = split_by_all_day(events);
   return (
-    <div className="overflow-x-auto rounded-lg border border-edge bg-surface-1">
+    <div className="rounded-lg border border-edge bg-surface-1">
       <AllDayStrip days={range.days} events={all_day} on_event={on_event} />
       <div
         className="grid"
