@@ -36,11 +36,13 @@ export type EventDraft = {
   repeat_until: string;
 };
 
-export function draft_from_slot(start: Date): EventDraft {
+/** `default_event_type` is the first of the user's fetched active types when
+ * available, falling back to the "task" preset key while types are loading. */
+export function draft_from_slot(start: Date, default_event_type = "task"): EventDraft {
   const end = slot_start(start, start.getHours() + 1);
   return {
     title: "",
-    event_type: "task",
+    event_type: default_event_type,
     attention_class: "active",
     date_local: date_input_value(start.toISOString()),
     start_time: time_input_value(start.toISOString()),

@@ -1,16 +1,18 @@
 import type { CalendarEvent } from "../../lib/api-schemas";
-import { event_block_style } from "../../lib/dispatch-maps/event-colors";
+import type { EventColorMap } from "../../lib/dispatch-maps/event-colors";
+import { event_block_style, resolve_event_color } from "../../lib/dispatch-maps/event-colors";
 import { event_day_layout } from "../../lib/time";
 import { format_time_range } from "../../lib/time";
 
 type EventBlockProps = {
   event: CalendarEvent;
   day: Date;
+  color_map: EventColorMap;
   on_select: (event: CalendarEvent) => void;
 };
 
 /** One positioned event inside a day column of the week grid. */
-export function EventBlock({ event, day, on_select }: EventBlockProps) {
+export function EventBlock({ event, day, color_map, on_select }: EventBlockProps) {
   const layout = event_day_layout(event.start_at, event.end_at, day);
   if (layout === null) return null;
   const is_done = event.status === "completed";
@@ -22,7 +24,7 @@ export function EventBlock({ event, day, on_select }: EventBlockProps) {
       style={{
         top: `${layout.top_pct}%`,
         height: `${layout.height_pct}%`,
-        ...event_block_style(event.event_type),
+        ...event_block_style(resolve_event_color(color_map, event.event_type)),
       }}
       className={`absolute inset-x-0.5 z-10 cursor-pointer overflow-hidden
         rounded-sm border px-1.5 py-0.5 text-left transition-all

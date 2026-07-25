@@ -350,7 +350,10 @@ async def patch_event(
     event = await event_repo.get_event(session, user_id, event_id)
     if event is None:
         raise EventError(404, "event not found")
-    if payload.event_type is not None:
+    # Validate the type only when it actually CHANGES — an event whose type was
+    # later hidden/deleted must stay editable (you just can't switch it to an
+    # invalid key). The event still holds its current key here (fields applied below).
+    if payload.event_type is not None and payload.event_type != event.event_type:
         await _check_event_type(session, user_id, payload.event_type)
     old_start, old_end = event.start_at, event.end_at
     if payload.calendar_id is not None:

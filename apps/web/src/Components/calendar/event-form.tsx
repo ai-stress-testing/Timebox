@@ -1,12 +1,11 @@
 import {
   attention_class_labels,
   attention_class_options,
-  event_type_labels,
-  event_type_options,
 } from "../../lib/dispatch-maps/labels";
-import type { EventTitleSuggestion } from "../../lib/api-schemas";
+import type { EventTitleSuggestion, EventTypeCreate, EventTypeSummary } from "../../lib/api-schemas";
 import { CheckboxField, SelectField, TextAreaField, TextField } from "../ui/field";
 import type { EventDraft } from "./event-draft";
+import { EventTypeField } from "./event-type-field";
 import { WeekdayToggles } from "./weekday-toggles";
 
 type FieldsProps = {
@@ -14,6 +13,8 @@ type FieldsProps = {
   errors: Record<string, string>;
   on_change: (patch: Partial<EventDraft>) => void;
   title_suggestions?: EventTitleSuggestion[];
+  event_types?: EventTypeSummary[];
+  on_create_type?: (payload: EventTypeCreate) => Promise<EventTypeSummary | null>;
 };
 
 const title_datalist_id = "event-title-options";
@@ -55,24 +56,24 @@ function TitleRow({ draft, errors, on_change, title_suggestions = [] }: FieldsPr
   );
 }
 
-function TypeAttentionRow({ draft, on_change }: FieldsProps) {
+async function no_create(): Promise<EventTypeSummary | null> {
+  return null;
+}
+
+function TypeAttentionRow({
+  draft,
+  on_change,
+  event_types = [],
+  on_create_type = no_create,
+}: FieldsProps) {
   return (
     <div className="grid grid-cols-2 gap-3">
-      <SelectField
-        label="Type"
+      <EventTypeField
         value={draft.event_type}
-        onChange={(event) =>
-          on_change({
-            event_type: event.target.value as EventDraft["event_type"],
-          })
-        }
-      >
-        {event_type_options.map((option) => (
-          <option key={option} value={option}>
-            {event_type_labels[option]}
-          </option>
-        ))}
-      </SelectField>
+        event_types={event_types}
+        on_change={(event_type) => on_change({ event_type })}
+        on_create_type={on_create_type}
+      />
       <SelectField
         label="Attention"
         value={draft.attention_class}

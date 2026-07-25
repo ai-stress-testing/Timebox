@@ -1,4 +1,5 @@
 import type { CalendarEvent } from "../../lib/api-schemas";
+import type { EventColorMap } from "../../lib/dispatch-maps/event-colors";
 import {
   day_start_hour,
   format_day_label,
@@ -14,6 +15,7 @@ import { EventBlock } from "./event-block";
 type WeekGridProps = {
   range: WeekRange;
   events: CalendarEvent[];
+  color_map: EventColorMap;
   on_slot: (start: Date) => void;
   on_event: (event: CalendarEvent) => void;
 };
@@ -33,9 +35,10 @@ function HourGutter() {
   );
 }
 
-function DayColumn({ day, events, on_slot, on_event }: {
+function DayColumn({ day, events, color_map, on_slot, on_event }: {
   day: Date;
   events: CalendarEvent[];
+  color_map: EventColorMap;
   on_slot: (start: Date) => void;
   on_event: (event: CalendarEvent) => void;
 }) {
@@ -66,6 +69,7 @@ function DayColumn({ day, events, on_slot, on_event }: {
             key={`${event.id}:${event.start_at}`}
             event={event}
             day={day}
+            color_map={color_map}
             on_select={on_event}
           />
         ))}
@@ -84,18 +88,25 @@ function split_by_all_day(events: CalendarEvent[]): {
   return { timed, all_day };
 }
 
-export function WeekGrid({ range, events, on_slot, on_event }: WeekGridProps) {
+export function WeekGrid({ range, events, color_map, on_slot, on_event }: WeekGridProps) {
   const { timed, all_day } = split_by_all_day(events);
   return (
     <div className="rounded-lg border border-edge bg-surface-1">
-      <AllDayStrip days={range.days} events={all_day} on_event={on_event} />
+      <AllDayStrip days={range.days} events={all_day} color_map={color_map} on_event={on_event} />
       <div
         className="grid"
         style={{ gridTemplateColumns: "var(--tb-gutter-width) repeat(7, minmax(0, 1fr))" }}
       >
         <HourGutter />
         {range.days.map((day) => (
-          <DayColumn key={day.toISOString()} day={day} events={timed} on_slot={on_slot} on_event={on_event} />
+          <DayColumn
+            key={day.toISOString()}
+            day={day}
+            events={timed}
+            color_map={color_map}
+            on_slot={on_slot}
+            on_event={on_event}
+          />
         ))}
       </div>
     </div>

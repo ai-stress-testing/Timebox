@@ -15,6 +15,9 @@ export const nonneg_int_from_input = z.coerce.number().int().nonnegative();
 
 /* ---------------------------------------------------------------- enums */
 
+// Retained only for non-event callers / the seed labels — events no longer
+// constrain event_type to this enum (spec 004: it's a free type_key validated
+// server-side against the user's event_types). Do not reintroduce it on events.
 export const event_type_schema = z.enum([
   "meeting",
   "task",
@@ -122,6 +125,33 @@ export const calendar_schema = z.object({
 export const calendar_list_schema = z.array(calendar_schema);
 export type Calendar = z.infer<typeof calendar_schema>;
 
+/* ---------------------------------------------------------- event types */
+
+/** User-defined + preset event types; `event_type` on events is a key into
+ * this set, not a fixed enum — see spec 004. */
+export const event_type_summary_schema = z.object({
+  id: z.string(),
+  key: z.string(),
+  label: z.string(),
+  color: calendar_color_schema,
+  is_preset: z.boolean(),
+  is_active: z.boolean(),
+  sort_order: z.number(),
+});
+export const event_type_summary_list_schema = z.array(event_type_summary_schema);
+export type EventTypeSummary = z.infer<typeof event_type_summary_schema>;
+
+export const event_type_create_schema = z.object({
+  label: z.string().min(1, "Label is required"),
+  color: calendar_color_schema,
+});
+export type EventTypeCreate = z.infer<typeof event_type_create_schema>;
+
+export type EventTypePatch = Partial<EventTypeCreate> & {
+  is_active?: boolean;
+  sort_order?: number;
+};
+
 /* --------------------------------------------------------------- events */
 
 export const event_create_schema = z
@@ -130,7 +160,9 @@ export const event_create_schema = z
     description: z.string().optional(),
     location: z.string().optional(),
     calendar_id: z.string().optional(),
-    event_type: event_type_schema,
+    /* event_type is a type_key string validated server-side against the
+     * user's active event_types (unknown key -> 422); no client enum. */
+    event_type: z.string().min(1, "Type is required"),
     attention_class: attention_class_schema.optional(),
     start_at: z.string().min(1, "Start time is required"),
     end_at: z.string().min(1, "End time is required"),
@@ -159,7 +191,7 @@ export const event_schema = z.object({
   description: z.string().nullish(),
   location: z.string().nullish(),
   calendar_id: z.string(),
-  event_type: event_type_schema,
+  event_type: z.string(),
   attention_class: attention_class_schema,
   canvas_event_type: canvas_event_type_schema,
   start_at: z.string(),

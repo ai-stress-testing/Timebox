@@ -1,3 +1,4 @@
+import { EventTypesManager } from "../Components/settings/event-types-manager";
 import { LlmSettingsForm } from "../Components/settings/llm-settings-form";
 import { use_llm_settings, use_save_llm_settings } from "../Hooks/use-ai";
 import type { LlmSettingsIn } from "../lib/api-schemas";
@@ -28,6 +29,7 @@ export function SettingsPage() {
       {settings.data ? (
         <LlmSettingsForm current={settings.data} on_submit={handle_save} busy={save.isPending} />
       ) : null}
+      <EventTypesManager />
     </section>
   );
 }

@@ -115,3 +115,32 @@ async def test_event_create_with_unknown_type_key_rejected(unlocked) -> None:
         "/events", json=_event_payload(event_type="not-a-real-type"), headers=headers
     )
     assert res.status_code == 422
+
+
+async def test_edit_event_of_hidden_type_still_saves(unlocked) -> None:
+    """Regression (code-review blocker): hiding an event's type must not brick
+    editing that event — only switching to a NEW invalid key is rejected."""
+    client, _keyfile, headers = unlocked
+    ev = await client.post("/events", json=_event_payload(event_type="personal"), headers=headers)
+    assert ev.status_code == 201, ev.text
+    event_id = ev.json()["id"]
+
+    types = (await client.get("/event-types", headers=headers)).json()
+    personal_id = next(t["id"] for t in types if t["key"] == "personal")
+    hidden = await client.patch(
+        f"/event-types/{personal_id}", json={"is_active": False}, headers=headers
+    )
+    assert hidden.status_code == 200
+
+    # Editing the event (unchanged type, just the title) must succeed, not 422.
+    edited = await client.patch(
+        f"/events/{event_id}", json={"title": "Renamed while type hidden"}, headers=headers
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["event_type"] == "personal"
+
+    # But switching to a genuinely unknown key is still rejected.
+    bad = await client.patch(
+        f"/events/{event_id}", json={"event_type": "nonexistent-type"}, headers=headers
+    )
+    assert bad.status_code == 422

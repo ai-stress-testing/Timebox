@@ -63,7 +63,10 @@ async def ensure_seeded(session: AsyncSession, user_id: str, data_key: bytes) ->
             sort_order=sort_order,
         )
         event_type_repo.add_event_type(session, event_type)
-    await session.commit()
+    # Flush, not commit: when called inside create_event(commit=False) (the
+    # apply_run path), an inner commit would break that caller's single-commit
+    # atomicity. Callers that need durability commit themselves.
+    await session.flush()
 
 
 async def list_types(
@@ -71,6 +74,8 @@ async def list_types(
 ) -> list[EventTypeSummary]:
     await ensure_seeded(session, user_id, data_key)
     rows = await event_type_repo.list_active(session, user_id)
+    # This GET seeds presets on first access — persist that seed.
+    await session.commit()
     return [_to_out(row, data_key) for row in rows]
 
 

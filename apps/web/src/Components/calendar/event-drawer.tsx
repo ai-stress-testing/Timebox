@@ -1,5 +1,11 @@
-import { useState } from "react";
-import type { CalendarEvent, EventCreate, EventPatch } from "../../lib/api-schemas";
+import { useEffect, useState } from "react";
+import type {
+  CalendarEvent,
+  EventCreate,
+  EventPatch,
+  EventTypeCreate,
+  EventTypeSummary,
+} from "../../lib/api-schemas";
 import { canvas_badge_labels } from "../../lib/dispatch-maps/canvas-badges";
 import {
   use_create_event,
@@ -8,6 +14,7 @@ import {
   use_update_event,
 } from "../../Hooks/use-events";
 import type { DeleteScope } from "../../Hooks/use-events";
+import { use_create_event_type, use_event_types } from "../../Hooks/use-event-types";
 import { to_error_message } from "../../Services/api-client";
 import { push_toast } from "../../Store/toast-store";
 import { Badge } from "../ui/badge";
@@ -24,10 +31,15 @@ export type DrawerTarget = { kind: "create"; start: Date } | { kind: "edit"; eve
 
 type EventDrawerProps = { target: DrawerTarget; on_close: () => void };
 
-function initial_draft(target: DrawerTarget): EventDraft {
+function initial_draft(target: DrawerTarget, default_event_type: string): EventDraft {
   return target.kind === "create"
-    ? draft_from_slot(target.start)
+    ? draft_from_slot(target.start, default_event_type)
     : draft_from_event(target.event);
+}
+
+/** Only active types are selectable when creating/editing an event. */
+function active_types(types: EventTypeSummary[] | undefined): EventTypeSummary[] {
+  return (types ?? []).filter((type) => type.is_active);
 }
 
 /** Recurrence editing is out of scope for the patch endpoint (issue #2) —
@@ -38,9 +50,27 @@ function to_patch(payload: EventCreate): EventPatch {
 }
 
 export function EventDrawer({ target, on_close }: EventDrawerProps) {
-  const [draft, set_draft] = useState<EventDraft>(() => initial_draft(target));
+  const types = use_event_types();
+  const create_type = use_create_event_type();
+  const selectable_types = active_types(types.data);
+  const [draft, set_draft] = useState<EventDraft>(() =>
+    initial_draft(target, selectable_types[0]?.key ?? "task"),
+  );
   const [errors, set_errors] = useState<Record<string, string>>({});
   const [show_delete_scope, set_show_delete_scope] = useState(false);
+
+  // Types may resolve after the drawer mounts; on create, reconcile the draft's
+  // type to the first active one if the initial default (e.g. a hidden "task")
+  // isn't selectable — otherwise submit would 422 on a hidden key.
+  useEffect(() => {
+    if (target.kind !== "create") return;
+    const keys = active_types(types.data).map((type) => type.key);
+    const first = keys[0];
+    if (first === undefined) return;
+    set_draft((current) =>
+      keys.includes(current.event_type) ? current : { ...current, event_type: first },
+    );
+  }, [target.kind, types.data]);
   const create = use_create_event();
   const update = use_update_event();
   const remove = use_delete_event();
@@ -49,6 +79,19 @@ export function EventDrawer({ target, on_close }: EventDrawerProps) {
   const is_edit = target.kind === "edit";
   const idle_label = is_edit ? "Save changes" : "Create event";
   const save_label = busy ? "Saving…" : idle_label;
+
+  const handle_create_type = async (
+    payload: EventTypeCreate,
+  ): Promise<EventTypeSummary | null> => {
+    try {
+      const created = await create_type.mutateAsync(payload);
+      push_toast(`Type "${created.label}" created.`, "ok");
+      return created;
+    } catch (cause) {
+      push_toast(to_error_message(cause), "danger");
+      return null;
+    }
+  };
 
   const handle_save = async () => {
     const built = build_event_create(draft);
@@ -117,6 +160,8 @@ export function EventDrawer({ target, on_close }: EventDrawerProps) {
             errors={errors}
             on_change={(patch) => set_draft((current) => ({ ...current, ...patch }))}
             title_suggestions={titles.data ?? []}
+            event_types={selectable_types}
+            on_create_type={handle_create_type}
           />
           {is_edit && !target.event.is_recurring ? (
             <EventQuickActions event={target.event} on_done={on_close} />

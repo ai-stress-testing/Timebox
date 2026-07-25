@@ -1,10 +1,12 @@
 import type { CalendarEvent } from "../../lib/api-schemas";
-import { event_block_style } from "../../lib/dispatch-maps/event-colors";
+import type { EventColorMap } from "../../lib/dispatch-maps/event-colors";
+import { event_block_style, resolve_event_color } from "../../lib/dispatch-maps/event-colors";
 import { date_input_value } from "../../lib/time";
 
 type AllDayStripProps = {
   days: Date[];
   events: CalendarEvent[];
+  color_map: EventColorMap;
   on_event: (event: CalendarEvent) => void;
 };
 
@@ -13,8 +15,9 @@ function events_for_day(events: CalendarEvent[], day: Date): CalendarEvent[] {
   return events.filter((event) => date_input_value(event.start_at) === day_key);
 }
 
-function AllDayChip({ event, on_event }: {
+function AllDayChip({ event, color_map, on_event }: {
   event: CalendarEvent;
+  color_map: EventColorMap;
   on_event: (event: CalendarEvent) => void;
 }) {
   return (
@@ -22,7 +25,7 @@ function AllDayChip({ event, on_event }: {
       type="button"
       onClick={() => on_event(event)}
       aria-label={`${event.title}, all day`}
-      style={event_block_style(event.event_type)}
+      style={event_block_style(resolve_event_color(color_map, event.event_type))}
       className="block w-full cursor-pointer truncate rounded-full border
         px-2 py-0.5 text-left text-xs font-semibold text-hi
         transition-transform duration-(--tb-dur-fast) ease-spring
@@ -34,22 +37,23 @@ function AllDayChip({ event, on_event }: {
   );
 }
 
-function AllDayDayCell({ day, events, on_event }: {
+function AllDayDayCell({ day, events, color_map, on_event }: {
   day: Date;
   events: CalendarEvent[];
+  color_map: EventColorMap;
   on_event: (event: CalendarEvent) => void;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-1 border-l border-edge px-1 py-1">
       {events_for_day(events, day).map((event) => (
-        <AllDayChip key={`${event.id}:${event.start_at}`} event={event} on_event={on_event} />
+        <AllDayChip key={`${event.id}:${event.start_at}`} event={event} color_map={color_map} on_event={on_event} />
       ))}
     </div>
   );
 }
 
 /** All-day lane, rendered directly above the hour grid, aligned to the same 7 day columns. */
-export function AllDayStrip({ days, events, on_event }: AllDayStripProps) {
+export function AllDayStrip({ days, events, color_map, on_event }: AllDayStripProps) {
   if (events.length === 0) return null;
   return (
     <div
@@ -63,7 +67,7 @@ export function AllDayStrip({ days, events, on_event }: AllDayStripProps) {
         All day
       </div>
       {days.map((day) => (
-        <AllDayDayCell key={day.toISOString()} day={day} events={events} on_event={on_event} />
+        <AllDayDayCell key={day.toISOString()} day={day} events={events} color_map={color_map} on_event={on_event} />
       ))}
     </div>
   );
