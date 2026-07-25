@@ -1,4 +1,3 @@
-import { use_lock } from "../../Hooks/use-vault";
 import { use_ui_store } from "../../Store/ui-store";
 import type { PageKey } from "../../Store/ui-store";
 import { Button } from "../ui/button";
@@ -8,6 +7,7 @@ const nav_items: ReadonlyArray<{ key: PageKey; label: string }> = [
   { key: "calendar", label: "Calendar" },
   { key: "chores", label: "Chores" },
   { key: "focus", label: "Focus" },
+  { key: "todo", label: "To do" },
 ];
 
 function NavTabs() {
@@ -41,7 +41,6 @@ export function AppHeader() {
   const open_ai_drawer = use_ui_store((state) => state.open_ai_drawer);
   const page = use_ui_store((state) => state.page);
   const set_page = use_ui_store((state) => state.set_page);
-  const lock = use_lock();
   return (
     <header
       className="sticky top-0 z-40 flex h-(--tb-header-height) items-center
@@ -67,9 +66,6 @@ export function AppHeader() {
           aria-current={page === "settings" ? "page" : undefined}
         >
           ⚙
-        </Button>
-        <Button variant="subtle" onClick={() => lock.mutate()} aria-label="Lock the vault">
-          Lock
         </Button>
       </div>
     </header>

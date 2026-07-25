@@ -9,6 +9,7 @@ from app.Models.event_type import EventType
 from app.Models.llm_settings import LlmSettings
 from app.Models.pomodoro import PomodoroSession, ResidualPrompt, TaskResidual
 from app.Models.schedule import ChoreOccurrence, ScheduleRun
+from app.Models.todo import Todo
 from app.Models.vault import VaultIdentity
 
 __all__ = [
@@ -26,5 +27,6 @@ __all__ = [
     "ResidualPrompt",
     "ScheduleRun",
     "TaskResidual",
+    "Todo",
     "VaultIdentity",
 ]

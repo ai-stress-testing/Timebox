@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 /* UI-only state: active page (no router lib) and the global AI drawer. */
 
-export type PageKey = "calendar" | "chores" | "focus" | "settings";
+export type PageKey = "calendar" | "chores" | "focus" | "todo" | "settings";
 
 type UiState = {
   page: PageKey;

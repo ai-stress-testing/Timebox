@@ -6,6 +6,7 @@ import { CalendarPage } from "./Pages/calendar-page";
 import { ChoresPage } from "./Pages/chores-page";
 import { FocusPage } from "./Pages/focus-page";
 import { SettingsPage } from "./Pages/settings-page";
+import { TodoPage } from "./Pages/todo-page";
 import { VaultPage } from "./Pages/vault-page";
 import { use_session_store } from "./Store/session-store";
 import { use_ui_store } from "./Store/ui-store";
@@ -16,6 +17,7 @@ const pages: Record<PageKey, ComponentType> = {
   calendar: CalendarPage,
   chores: ChoresPage,
   focus: FocusPage,
+  todo: TodoPage,
   settings: SettingsPage,
 };
 
