@@ -63,8 +63,15 @@ export function slot_start(day: Date, hour: number): Date {
 
 /* ------------------------------------------------------------ formatting */
 
+function format_am_pm(hour: number, minute: number, omit_zero_minutes: boolean): string {
+  const period = hour < 12 ? "AM" : "PM";
+  const twelve_hour = hour % 12 === 0 ? 12 : hour % 12;
+  const minute_part = omit_zero_minutes && minute === 0 ? "" : `:${pad2(minute)}`;
+  return `${twelve_hour}${minute_part} ${period}`;
+}
+
 export function format_hour_label(hour: number): string {
-  return `${pad2(hour % 24)}:00`;
+  return format_am_pm(hour % 24, 0, true);
 }
 
 export function format_day_label(day: Date): string {
@@ -87,7 +94,7 @@ export function format_week_title(range: WeekRange): string {
 
 export function format_time(iso: string): string {
   const date = new Date(iso);
-  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  return format_am_pm(date.getHours(), date.getMinutes(), false);
 }
 
 export function format_time_range(start_iso: string, end_iso: string): string {
@@ -183,4 +190,13 @@ export function event_day_layout(
   const top_pct = ((start - window_start) / window_span) * 100;
   const height_pct = Math.max(((end - start) / window_span) * 100, 1.5);
   return { top_pct, height_pct };
+}
+
+/** Vertical position (top %) of `now` inside `day`'s visible window; null when out of range. */
+export function now_top_pct(now: Date, day: Date): number | null {
+  const window_start = slot_start(day, day_start_hour).getTime();
+  const window_end = window_start + visible_hours * (ms_per_day / 24);
+  const point = now.getTime();
+  if (point < window_start || point > window_end) return null;
+  return ((point - window_start) / (window_end - window_start)) * 100;
 }

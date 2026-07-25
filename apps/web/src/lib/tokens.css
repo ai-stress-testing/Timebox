@@ -86,6 +86,7 @@
     0 0 24px oklch(0.68 0.21 300 / 0.35),
     0 8px 32px oklch(0.6 0.18 280 / 0.25);
   --tb-glow-soft: 0 0 20px oklch(0.68 0.21 300 / 0.18);
+  --tb-glow-danger: 0 0 10px oklch(0.7 0.19 12 / 0.55);
   --tb-glow-focus:
     0 0 0 2px var(--tb-surface-0),
     0 0 0 4px var(--tb-accent-2);
@@ -98,4 +99,5 @@
   --tb-gutter-width: 3.5rem;
   --tb-drawer-width: 26rem;
   --tb-header-height: 3.75rem;
+  --tb-now-line-height: 10px;
 }

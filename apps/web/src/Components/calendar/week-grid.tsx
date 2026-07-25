@@ -1,16 +1,37 @@
 import type { CalendarEvent } from "../../lib/api-schemas";
 import type { EventColorMap } from "../../lib/dispatch-maps/event-colors";
+import { use_now } from "../../Hooks/use-now";
 import {
   day_start_hour,
   format_day_label,
   format_hour_label,
   is_same_day,
+  now_top_pct,
   slot_start,
   visible_hours,
 } from "../../lib/time";
 import type { WeekRange } from "../../lib/time";
 import { AllDayStrip } from "./all-day-strip";
 import { EventBlock } from "./event-block";
+
+/** The now-line re-reads the clock this often; it trails, it doesn't animate. */
+const now_line_refresh_ms = 15 * 60 * 1000;
+
+/** Red marker for the current moment — only rendered in today's column. */
+function NowLine({ day }: { day: Date }) {
+  const now = use_now(now_line_refresh_ms);
+  if (!is_same_day(day, now)) return null;
+  const top_pct = now_top_pct(now, day);
+  if (top_pct === null) return null;
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-x-0 z-20 h-(--tb-now-line-height)
+        bg-danger shadow-glow-danger"
+      style={{ top: `calc(${top_pct}% - (var(--tb-now-line-height) / 2))` }}
+    />
+  );
+}
 
 type WeekGridProps = {
   range: WeekRange;
@@ -73,6 +94,7 @@ function DayColumn({ day, events, color_map, on_slot, on_event }: {
             on_select={on_event}
           />
         ))}
+        <NowLine day={day} />
       </div>
     </div>
   );
