@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.Core.database import get_session
 from app.Routers.deps import SessionContext, get_session_context
 from app.Schemas.base import UtcDateTime
-from app.Schemas.event import EventCreate, EventOut, EventPatch, EventTitleSuggestion
+from app.Schemas.event import (
+    EventCreate,
+    EventOut,
+    EventPatch,
+    EventSplitRequest,
+    EventSplitResponse,
+    EventTitleSuggestion,
+)
 from app.Services import event_service
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -67,6 +74,22 @@ async def patch_event(
         return await event_service.patch_event(db, ctx.user_id, ctx.data_key, event_id, payload)
     except event_service.EventError as exc:
         raise HTTPException(exc.status_code, exc.detail) from exc
+
+
+@router.post("/{event_id}/split", response_model=EventSplitResponse)
+async def split_event(
+    event_id: str,
+    payload: EventSplitRequest,
+    ctx: SessionContext = Depends(get_session_context),
+    db: AsyncSession = Depends(get_session),
+) -> EventSplitResponse:
+    try:
+        first, second = await event_service.split_event(
+            db, ctx.user_id, ctx.data_key, event_id, payload.split_at
+        )
+    except event_service.EventError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    return EventSplitResponse(first=first, second=second)
 
 
 @router.delete("/{event_id}", status_code=204)

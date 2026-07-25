@@ -371,6 +371,56 @@ async def patch_event(
     return to_out(event, data_key)
 
 
+async def split_event(
+    session: AsyncSession, user_id: str, data_key: bytes, event_id: str, split_at: datetime
+) -> tuple[EventOut, EventOut]:
+    """Split one event into two adjacent events at `split_at` (issue #9's
+    deferred case: the edit-event flow had no way to say "this block was
+    actually two things"). The original row becomes the first half (its
+    identity/history stays put); a new row is created for the second half.
+    Both halves start with a clean slate for estimated/actual minutes since
+    neither figure is accurate for a sub-span of the original block — the
+    user re-logs them per half, same "treated after the fact" model as the
+    rest of event editing.
+    """
+    event = await event_repo.get_event(session, user_id, event_id)
+    if event is None:
+        raise EventError(404, "event not found")
+    if event.is_recurring:
+        raise EventError(409, "cannot split a recurring event")
+    if event.is_all_day:
+        raise EventError(409, "cannot split an all-day event")
+    split_point = _naive_utc(split_at)
+    if not (event.start_at < split_point < event.end_at):
+        raise EventError(400, "split_at must fall strictly between start_at and end_at")
+
+    old_start, old_end = event.start_at, event.end_at
+    second = Event(
+        calendar_id=event.calendar_id,
+        user_id=user_id,
+        event_type=event.event_type,
+        attention_class=event.attention_class,
+        title_enc=event.title_enc,
+        description_enc=event.description_enc,
+        location_enc=event.location_enc,
+        start_at=split_point,
+        end_at=old_end,
+        is_all_day=False,
+        is_recurring=False,
+        recurrence_weekdays=json.dumps([]),
+    )
+    event.end_at = split_point
+    event.estimated_minutes = None
+    event.actual_minutes = None
+    event_repo.add_event(session, second)
+    await session.flush()
+    await _reassign_canvas_types(session, event)
+    await _reassign_canvas_types(session, second)
+    await _reassign_range(session, user_id, old_start, old_end)
+    await session.commit()
+    return to_out(event, data_key), to_out(second, data_key)
+
+
 def _require_occurrence_date(occurrence_date: str | None, scope: str) -> str:
     if occurrence_date is None or not DATE_YMD.match(occurrence_date):
         raise EventError(400, f"occurrence_date is required for scope={scope}")

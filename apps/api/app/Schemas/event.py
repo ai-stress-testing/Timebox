@@ -95,6 +95,15 @@ class EventOut(ApiModel):
     updated_at: UtcDateTime
 
 
+class EventSplitRequest(ApiModel):
+    split_at: UtcDateTime
+
+
+class EventSplitResponse(ApiModel):
+    first: EventOut
+    second: EventOut
+
+
 class EventTitleSuggestion(ApiModel):
     """One autocomplete entry: a title the user has used before, how often,
     and the typical duration (learned from prior events of that title).

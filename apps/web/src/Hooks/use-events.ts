@@ -3,6 +3,7 @@ import { api_request, api_request_empty } from "../Services/api-client";
 import {
   event_list_schema,
   event_schema,
+  event_split_response_schema,
   event_title_suggestion_list_schema,
 } from "../lib/api-schemas";
 import type { EventCreate, EventPatch } from "../lib/api-schemas";
@@ -46,6 +47,18 @@ export function use_update_event() {
       api_request(`/events/${input.id}`, event_schema, {
         method: "PATCH",
         body: input.patch,
+      }),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function use_split_event() {
+  const invalidate = use_events_invalidation();
+  return useMutation({
+    mutationFn: (input: { id: string; split_at: string }) =>
+      api_request(`/events/${input.id}/split`, event_split_response_schema, {
+        method: "POST",
+        body: { split_at: input.split_at },
       }),
     onSuccess: () => invalidate(),
   });

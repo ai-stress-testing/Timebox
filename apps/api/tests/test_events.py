@@ -378,6 +378,84 @@ async def test_title_suggestions_group_and_average(unlocked) -> None:
     assert res.json()[0]["title"] == "Gym"
 
 
+async def test_split_event_creates_two_adjacent_events(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post(
+        "/events",
+        json=_event_payload(
+            title="Deep work block",
+            start_at="2026-07-14T14:00:00Z",
+            end_at="2026-07-14T16:00:00Z",
+            estimated_minutes=120,
+        ),
+        headers=headers,
+    )
+    event_id = created.json()["id"]
+    await client.patch(f"/events/{event_id}", json={"actual_minutes": 90}, headers=headers)
+
+    split = await client.post(
+        f"/events/{event_id}/split",
+        json={"split_at": "2026-07-14T15:00:00Z"},
+        headers=headers,
+    )
+    assert split.status_code == 200, split.text
+    body = split.json()
+    first, second = body["first"], body["second"]
+
+    assert first["id"] == event_id
+    assert first["start_at"] == "2026-07-14T14:00:00Z"
+    assert first["end_at"] == "2026-07-14T15:00:00Z"
+    assert first["estimated_minutes"] is None
+    assert first["actual_minutes"] is None
+    assert first["title"] == "Deep work block"
+
+    assert second["id"] != event_id
+    assert second["start_at"] == "2026-07-14T15:00:00Z"
+    assert second["end_at"] == "2026-07-14T16:00:00Z"
+    assert second["title"] == "Deep work block"
+    assert second["estimated_minutes"] is None
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    assert sorted(e["id"] for e in listed.json()) == sorted([first["id"], second["id"]])
+
+
+async def test_split_event_rejects_out_of_range_point(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post(
+        "/events",
+        json=_event_payload(start_at="2026-07-14T14:00:00Z", end_at="2026-07-14T16:00:00Z"),
+        headers=headers,
+    )
+    event_id = created.json()["id"]
+
+    before_start = await client.post(
+        f"/events/{event_id}/split",
+        json={"split_at": "2026-07-14T13:00:00Z"},
+        headers=headers,
+    )
+    assert before_start.status_code == 400
+
+    at_end = await client.post(
+        f"/events/{event_id}/split",
+        json={"split_at": "2026-07-14T16:00:00Z"},
+        headers=headers,
+    )
+    assert at_end.status_code == 400
+
+
+async def test_split_recurring_event_rejected(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    event_id = created.json()["id"]
+
+    split = await client.post(
+        f"/events/{event_id}/split",
+        json={"split_at": "2026-07-13T09:15:00Z"},
+        headers=headers,
+    )
+    assert split.status_code == 409
+
+
 async def test_patch_actual_minutes_and_move(unlocked) -> None:
     client, _keyfile, headers = unlocked
     created = await client.post("/events", json=_event_payload(), headers=headers)

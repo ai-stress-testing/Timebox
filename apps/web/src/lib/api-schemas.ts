@@ -225,6 +225,11 @@ export type EventPatch = Partial<EventCreate> & {
   actual_minutes?: number;
 };
 
+export const event_split_response_schema = z.object({
+  first: event_schema,
+  second: event_schema,
+});
+
 /* --------------------------------------------------------------- chores */
 
 const hhmm = z
