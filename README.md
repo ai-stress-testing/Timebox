@@ -40,7 +40,7 @@ specs/          spec-kit feature specs (spec / plan / tasks)
 - **uv** (optional) — fast venv/installer; the setup falls back to `python -m venv` + `pip` if absent.
 - **Ollama** (optional) — only for AI timeboxing; the calendar works fully without it. See [Running Ollama](#running-ollama-the-ai-provider) below.
 - **OS**: Linux, macOS, or Windows (WSL2 recommended on Windows).
-- **Zero-prerequisite alternative**: Docker — `docker build -t timebox . && docker run -p 8787:8787 timebox`, then open `http://localhost:8787`. To reach a host Ollama from the container, see [Docker + Ollama networking](#docker--reaching-your-hosts-ollama).
+- **Zero-prerequisite alternative**: Docker — `docker build -t timebox . && docker run -p 8787:8787 timebox`, then open `http://localhost:8787`. To reach a host Ollama from the container, see [Docker + Ollama networking](#docker--reaching-your-hosts-ollama) — or skip the manual flags entirely with `docker compose up --build`.
 
 One-command dev start: `./start.sh` boots both the API and web dev server.
 
@@ -107,6 +107,24 @@ so two things must line up:
    a container can't reach a host Ollama: by default it binds to loopback only
    and refuses the connection.
 2. **The container must be told where the host is** via `TIMEBOX_OLLAMA_BASE_URL`.
+
+**Recommended — `docker-compose.yml`** does both automatically (it sets the
+`host.docker.internal` mapping and points `TIMEBOX_OLLAMA_BASE_URL` at it for
+you, on Linux and Docker Desktop alike):
+
+```bash
+# Ollama already running on the host (see "Running Ollama" above)
+docker compose up --build
+
+# Fully self-contained instead — an Ollama sidecar on the compose network,
+# no host install needed:
+docker compose --profile with-ollama up --build
+docker compose exec ollama ollama pull llama3.2
+TIMEBOX_OLLAMA_BASE_URL=http://ollama:11434 docker compose --profile with-ollama up --build
+```
+
+The rest of this section is the equivalent by hand with plain `docker run`, for
+anyone not using Compose.
 
 **macOS / Windows** (Docker Desktop resolves `host.docker.internal` for you):
 
