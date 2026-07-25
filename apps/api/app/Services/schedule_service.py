@@ -22,7 +22,7 @@ from app.Pipelines.monte_carlo import (
 )
 from app.Repositories import chore_repo, event_repo, schedule_repo
 from app.Schemas.event import EventCreate
-from app.Schemas.base import EventType, AttentionClass
+from app.Schemas.base import AttentionClass
 from app.Schemas.schedule import (
     ApplyResponse,
     OccurrenceOut,
@@ -216,7 +216,7 @@ async def apply_run(
             data_key,
             EventCreate(
                 title=names.get(occ.chore_id, "Chore"),
-                event_type=EventType.chore,
+                event_type="chore",  # the "chore" preset type_key (see event_type_service)
                 attention_class=attention_by_chore.get(occ.chore_id, AttentionClass.active),
                 start_at=occ.proposed_start_at,
                 end_at=occ.proposed_end_at,

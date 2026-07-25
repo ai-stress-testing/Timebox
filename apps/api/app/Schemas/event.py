@@ -1,14 +1,21 @@
-"""Event schemas — canvas_event_type is server-assigned, never client-set."""
+"""Event schemas — canvas_event_type is server-assigned, never client-set.
+
+`event_type` (on Create/Patch/Out) is a `type_key` string validated dynamically
+against the caller's `event_types` rows in the service layer — NOT the static
+`EventType` enum in `Schemas.base` (that enum stays for other callers, e.g.
+chores, but events opted out so users can define their own types).
+"""
 from pydantic import Field, field_validator, model_validator
 
 from app.Schemas.base import (
     ApiModel,
     AttentionClass,
     AttentionClassField,
+    CalendarColor,
+    CalendarColorField,
     CanvasEventType,
     EventStatus,
     EventStatusField,
-    EventTypeField,
     UtcDateTime,
 )
 
@@ -21,7 +28,7 @@ class EventCreate(ApiModel):
     description: str | None = Field(default=None, max_length=4000)
     location: str | None = Field(default=None, max_length=300)
     calendar_id: str | None = None
-    event_type: EventTypeField
+    event_type: str = Field(min_length=1, max_length=80)
     attention_class: AttentionClassField = AttentionClass.active
     start_at: UtcDateTime
     end_at: UtcDateTime
@@ -53,7 +60,7 @@ class EventPatch(ApiModel):
     description: str | None = Field(default=None, max_length=4000)
     location: str | None = Field(default=None, max_length=300)
     calendar_id: str | None = None
-    event_type: EventTypeField | None = None
+    event_type: str | None = Field(default=None, min_length=1, max_length=80)
     attention_class: AttentionClassField | None = None
     status: EventStatusField | None = None
     start_at: UtcDateTime | None = None
@@ -69,7 +76,7 @@ class EventOut(ApiModel):
     title: str
     description: str | None
     location: str | None
-    event_type: EventTypeField
+    event_type: str
     attention_class: AttentionClass
     canvas_event_type: CanvasEventType
     status: EventStatus
@@ -95,3 +102,25 @@ class EventTitleSuggestion(ApiModel):
     title: str
     occurrence_count: int
     avg_minutes: int | None
+
+
+class EventTypeSummary(ApiModel):
+    id: str
+    key: str
+    label: str
+    color: CalendarColor
+    is_preset: bool
+    is_active: bool
+    sort_order: int
+
+
+class EventTypeCreate(ApiModel):
+    label: str = Field(min_length=1, max_length=80)
+    color: CalendarColorField
+
+
+class EventTypePatch(ApiModel):
+    label: str | None = Field(default=None, min_length=1, max_length=80)
+    color: CalendarColorField | None = None
+    is_active: bool | None = None
+    sort_order: int | None = None

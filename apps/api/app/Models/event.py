@@ -13,7 +13,7 @@ class Event(Base, EntityMixin):
     calendar_id: Mapped[str] = mapped_column(String(36), nullable=False)
     user_id: Mapped[str] = mapped_column(String(36), nullable=False)
 
-    event_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     attention_class: Mapped[str] = mapped_column(String(16), default="active", nullable=False)
     canvas_event_type: Mapped[str | None] = mapped_column(String(16), default=None)
     status: Mapped[str] = mapped_column(String(16), default="scheduled", nullable=False)

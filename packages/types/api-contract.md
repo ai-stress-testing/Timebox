@@ -11,7 +11,6 @@ Auth: `Authorization: Bearer <token>` on every route **except**
 ## Enums
 
 ```
-event_type       = meeting | task | personal | chore | homework | passive | physical
 attention_class  = active | involved | passive
 canvas_event_type= focus_only | involved_only | passive_multi | focus_passive
 event_status     = scheduled | in_progress | completed | skipped | cancelled
@@ -51,19 +50,56 @@ must state that losing it makes the data unrecoverable.
 `Calendar = { id, name, color: calendar_color|null, is_visible, created_at, updated_at }`
 (`color: null` marks the default calendar, auto-created on first unlock.)
 
+## Event Types
+
+User-defined event types (spec 004 / GH #26). `GET /event-types` seeds the 7
+built-in presets for the caller on first call (idempotent — a no-op once any
+row exists). Presets are recolorable/hideable (`PATCH`) but **not deletable**
+(`DELETE` → 409). `key` is a server-derived slug from `label`, unique per
+user among live rows; a colliding label gets a numeric suffix (`-2`, `-3`, …).
+
+| Route | Notes |
+|---|---|
+| `GET /event-types` | active types for the user, ordered by `sort_order` then `created_at` → `EventTypeSummary[]` |
+| `POST /event-types` | `EventTypeCreate` → `EventTypeSummary` (201) · 409 if a unique key cannot be derived |
+| `PATCH /event-types/{id}` | `EventTypePatch` → `EventTypeSummary` · 404 if missing |
+| `DELETE /event-types/{id}` | soft-delete a custom type → 204 · 404 if missing · **409 if `is_preset`** |
+
+```ts
+type EventTypeSummary = {
+  id: string; key: string; label: string; color: calendar_color;
+  is_preset: boolean; is_active: boolean; sort_order: number;
+};
+type EventTypeCreate = { label: string; color: calendar_color };   // label 1..80 chars
+type EventTypePatch = {
+  label?: string; color?: calendar_color; is_active?: boolean; sort_order?: number;
+};
+```
+
+Preset seed (`key` → `color`, in this `sort_order`): `meeting` → `sky`,
+`task` → `violet`, `personal` → `emerald`, `chore` → `amber`,
+`homework` → `rose`, `passive` → `slate`, `physical` → `orange`. Preset
+`label` is the capitalized key (e.g. `"meeting"` → `"Meeting"`).
+
 ## Events
+
+**Breaking change:** `event_type` is no longer the static `EventType` enum —
+it is a free-form `type_key` string, validated server-side against the
+caller's **active** `event_types.key` values (unknown key on
+create/patch → 422). `GET /event-types` is the source of truth for the
+selectable set; there is no client-side enum to validate against anymore.
 
 | Route | Notes |
 |---|---|
 | `GET /events?start=iso&end=iso` | events overlapping the range → `Event[]` |
-| `POST /events` | `EventCreate` → `Event` (201) |
+| `POST /events` | `EventCreate` → `Event` (201) · 422 if `event_type` is not a known key |
 | `GET /events/{id}` · `PATCH /events/{id}` (partial `EventCreate` + `status`) · `DELETE` → 204 |
 
 ```ts
 type EventCreate = {
   title: string; description?: string; location?: string;
   calendar_id?: string;                 // default calendar if omitted
-  event_type: EventType;
+  event_type: string;                   // type_key — see Event Types; min 1 char
   attention_class?: AttentionClass;     // default "active"
   start_at: string; end_at: string;     // end > start
   is_all_day?: boolean;

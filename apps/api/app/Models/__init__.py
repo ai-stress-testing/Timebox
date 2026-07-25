@@ -5,6 +5,7 @@ from app.Models.calendar import Calendar
 from app.Models.chore import ChoreDefinition
 from app.Models.event import Event
 from app.Models.event_exception import EventException
+from app.Models.event_type import EventType
 from app.Models.llm_settings import LlmSettings
 from app.Models.pomodoro import PomodoroSession, ResidualPrompt, TaskResidual
 from app.Models.schedule import ChoreOccurrence, ScheduleRun
@@ -18,6 +19,7 @@ __all__ = [
     "ChoreOccurrence",
     "Event",
     "EventException",
+    "EventType",
     "LlmSettings",
     "PomodoroSession",
     "PurgeAudit",

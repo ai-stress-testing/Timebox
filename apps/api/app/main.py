@@ -14,7 +14,7 @@ from app.Core.logging import configure_logging, get_logger
 from app.Core.sessions import InMemorySessionStore
 from app.Middleware.auth import SessionAuthMiddleware
 from app.Middleware.trace import TraceIdMiddleware
-from app.Routers import ai, calendars, chores, events, pomodoro, schedule, vault
+from app.Routers import ai, calendars, chores, event_types, events, pomodoro, schedule, vault
 from app.Services.Llm.ollama import build_default_provider
 from app.Services.purge_service import run_purge
 
@@ -73,6 +73,7 @@ def create_app() -> FastAPI:
         vault.router,
         calendars.router,
         events.router,
+        event_types.router,
         chores.router,
         schedule.router,
         pomodoro.router,

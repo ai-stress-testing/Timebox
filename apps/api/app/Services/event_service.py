@@ -17,9 +17,9 @@ from app.Schemas.base import (
     AttentionClass,
     CanvasEventType,
     EventStatus,
-    EventType,
 )
 from app.Schemas.event import EventCreate, EventOut, EventPatch, EventTitleSuggestion
+from app.Services import event_type_service
 from app.Services.calendar_service import ensure_default_calendar
 
 DeleteScope = Literal["all", "occurrence", "following"]
@@ -57,7 +57,7 @@ def to_out(event: Event, data_key: bytes) -> EventOut:
         title=crypto.decrypt_field(data_key, event.title_enc),
         description=_decrypt_optional(data_key, event.description_enc),
         location=_decrypt_optional(data_key, event.location_enc),
-        event_type=EventType(event.event_type),
+        event_type=event.event_type,
         attention_class=AttentionClass(event.attention_class),
         canvas_event_type=CanvasEventType(event.canvas_event_type or "focus_only"),
         status=EventStatus(event.status),
@@ -95,7 +95,7 @@ def _occurrence_out(
         title=title,
         description=description,
         location=location,
-        event_type=EventType(master.event_type),
+        event_type=master.event_type,
         attention_class=AttentionClass(master.attention_class),
         canvas_event_type=CanvasEventType(master.canvas_event_type or "focus_only"),
         status=EventStatus(master.status),
@@ -191,6 +191,15 @@ async def _resolve_calendar_id(
     return calendar.id
 
 
+async def _check_event_type(session: AsyncSession, user_id: str, event_type: str) -> None:
+    """Validate a `type_key` against the caller's active event types — the
+    dynamic replacement for the old static `EventType` enum check.
+    """
+    keys = await event_type_service.valid_keys(session, user_id)
+    if event_type not in keys:
+        raise EventError(422, "unknown event type")
+
+
 async def create_event(
     session: AsyncSession,
     user_id: str,
@@ -198,11 +207,13 @@ async def create_event(
     payload: EventCreate,
     commit: bool = True,
 ) -> EventOut:
+    await event_type_service.ensure_seeded(session, user_id, data_key)
+    await _check_event_type(session, user_id, payload.event_type)
     calendar_id = await _resolve_calendar_id(session, user_id, data_key, payload.calendar_id)
     event = Event(
         calendar_id=calendar_id,
         user_id=user_id,
-        event_type=payload.event_type.value,
+        event_type=payload.event_type,
         attention_class=payload.attention_class.value,
         title_enc=crypto.encrypt_field(data_key, payload.title),
         description_enc=(
@@ -307,7 +318,7 @@ def _mean_minutes(values: list[int]) -> int | None:
 
 def _apply_plain_fields(event: Event, payload: EventPatch) -> None:
     if payload.event_type is not None:
-        event.event_type = payload.event_type.value
+        event.event_type = payload.event_type
     if payload.attention_class is not None:
         event.attention_class = payload.attention_class.value
     if payload.status is not None:
@@ -339,6 +350,8 @@ async def patch_event(
     event = await event_repo.get_event(session, user_id, event_id)
     if event is None:
         raise EventError(404, "event not found")
+    if payload.event_type is not None:
+        await _check_event_type(session, user_id, payload.event_type)
     old_start, old_end = event.start_at, event.end_at
     if payload.calendar_id is not None:
         event.calendar_id = await _resolve_calendar_id(

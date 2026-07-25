@@ -21,3 +21,7 @@ JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
 
 # YYYY-MM-DD occurrence dates on recurring-event delete/exception operations.
 DATE_YMD = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# Runs of non-alphanumeric characters, collapsed to one hyphen when deriving
+# an event-type `key` slug from a user-supplied label.
+SLUG_NON_ALNUM = re.compile(r"[^a-z0-9]+")
