@@ -3,7 +3,10 @@ import type { PomodoroSession } from "../../lib/api-schemas";
 
 const tick_interval_ms = 1_000;
 
-function format_elapsed(total_seconds: number): string {
+/** mm:ss for a duration in seconds — the one countdown/count-up formatter in
+ * the app; shared by the Radial Canvas timers/stopwatches (Components/canvas)
+ * and the routines run view, so neither writes a second one. */
+export function format_elapsed(total_seconds: number): string {
   const minutes = Math.floor(total_seconds / 60);
   const seconds = total_seconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;

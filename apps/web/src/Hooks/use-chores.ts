@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api_request, api_request_empty } from "../Services/api-client";
 import { chore_list_schema, chore_schema } from "../lib/api-schemas";
-import type { ChoreCreate } from "../lib/api-schemas";
+import type { ChoreComplete, ChoreCreate } from "../lib/api-schemas";
 
 const chores_key = ["chores"] as const;
 
@@ -43,6 +43,18 @@ export function use_delete_chore() {
   return useMutation({
     mutationFn: (id: string) =>
       api_request_empty(`/chores/${id}`, { method: "DELETE" }),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function use_complete_chore() {
+  const invalidate = use_chores_invalidation();
+  return useMutation({
+    mutationFn: (input: { id: string; body?: ChoreComplete }) =>
+      api_request(`/chores/${input.id}/complete`, chore_schema, {
+        method: "POST",
+        body: input.body ?? {},
+      }),
     onSuccess: () => invalidate(),
   });
 }

@@ -3,8 +3,10 @@ import { AppHeader } from "./Components/layout/app-header";
 import { TimeboxDrawer } from "./Components/ai/timebox-drawer";
 import { ToastViewport } from "./Components/ui/toast-viewport";
 import { CalendarPage } from "./Pages/calendar-page";
+import { CanvasPage } from "./Pages/canvas-page";
 import { ChoresPage } from "./Pages/chores-page";
 import { FocusPage } from "./Pages/focus-page";
+import { RoutinesPage } from "./Pages/routines-page";
 import { SettingsPage } from "./Pages/settings-page";
 import { TodoPage } from "./Pages/todo-page";
 import { VaultPage } from "./Pages/vault-page";
@@ -18,6 +20,8 @@ const pages: Record<PageKey, ComponentType> = {
   chores: ChoresPage,
   focus: FocusPage,
   todo: TodoPage,
+  routines: RoutinesPage,
+  canvas: CanvasPage,
   settings: SettingsPage,
 };
 

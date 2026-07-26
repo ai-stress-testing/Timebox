@@ -8,6 +8,8 @@ const nav_items: ReadonlyArray<{ key: PageKey; label: string }> = [
   { key: "chores", label: "Chores" },
   { key: "focus", label: "Focus" },
   { key: "todo", label: "To do" },
+  { key: "routines", label: "Routines" },
+  { key: "canvas", label: "Canvas" },
 ];
 
 function NavTabs() {
