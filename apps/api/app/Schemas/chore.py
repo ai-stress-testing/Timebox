@@ -102,5 +102,11 @@ class ChoreOut(ApiModel):
     is_active: bool
     last_completed_at: UtcDateTime | None
     next_due_at: UtcDateTime | None
+    days_until_due: int | None
+    recommended_n: int | None
     created_at: UtcDateTime
     updated_at: UtcDateTime
+
+
+class ChoreComplete(ApiModel):
+    completed_at: UtcDateTime | None = None

@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.Core import crypto
 from app.Models.base import utc_now
 from app.Models.chore import ChoreDefinition
-from app.Repositories import chore_repo
+from app.Pipelines.chore_entropy import days_until_due as compute_days_until_due
+from app.Repositories import chore_entropy_repo, chore_repo
 from app.Schemas.base import AttentionClass, CalendarColor
 from app.Schemas.chore import ChoreCreate, ChoreOut, ChorePatch
 
@@ -19,8 +20,10 @@ class ChoreError(Exception):
         self.detail = detail
 
 
-def to_out(chore: ChoreDefinition, data_key: bytes) -> ChoreOut:
+async def to_out(session: AsyncSession, chore: ChoreDefinition, data_key: bytes) -> ChoreOut:
     color = CalendarColor(chore.color) if chore.color else None
+    entropy = await chore_entropy_repo.get_entropy(session, chore.id)
+    recommended_n = entropy.recommended_n if entropy else None
     return ChoreOut(
         id=chore.id,
         name=crypto.decrypt_field(data_key, chore.name_enc),
@@ -40,6 +43,8 @@ def to_out(chore: ChoreDefinition, data_key: bytes) -> ChoreOut:
         is_active=chore.is_active,
         last_completed_at=chore.last_completed_at,
         next_due_at=chore.next_due_at,
+        days_until_due=compute_days_until_due(chore.next_due_at, utc_now()),
+        recommended_n=recommended_n,
         created_at=chore.created_at,
         updated_at=chore.updated_at,
     )
@@ -67,12 +72,12 @@ async def create_chore(
     )
     chore_repo.add_chore(session, chore)
     await session.commit()
-    return to_out(chore, data_key)
+    return await to_out(session, chore, data_key)
 
 
 async def list_chores(session: AsyncSession, user_id: str, data_key: bytes) -> list[ChoreOut]:
     chores = await chore_repo.list_chores(session, user_id)
-    return [to_out(chore, data_key) for chore in chores]
+    return [await to_out(session, chore, data_key) for chore in chores]
 
 
 def _apply_patch(chore: ChoreDefinition, payload: ChorePatch, data_key: bytes) -> None:
@@ -110,7 +115,7 @@ async def patch_chore(
     if not chore.n_min <= chore.n_current <= chore.n_max:
         raise ChoreError(400, "n_days must lie within [n_min, n_max]")
     await session.commit()
-    return to_out(chore, data_key)
+    return await to_out(session, chore, data_key)
 
 
 async def delete_chore(session: AsyncSession, user_id: str, chore_id: str) -> None:
