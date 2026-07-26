@@ -85,13 +85,19 @@ steps.
   - `POST /routines/{id}/schedule { start_at, event_type, attention_class?
     }` — the calendar-placement funnel.
   - `GET /routines/{id}/runs?limit=` (history)
-- **Frontend**: a dedicated **Routines** page (new top-nav item — the app is
-  already at 4 nav items after issue #12 added "To do"; a 5th is fine, or
-  fold Routines under an existing page if the header gets crowded,
-  implementer's call) with list + step builder (reorder via drag →
-  `position`, live total-estimate display), and a focused **run view**
-  (current step, large running timer, Done/Skip/Pause/Abandon, whole-run
-  timer alongside) — reuse the pomodoro timer's `mm:ss` formatting helper
+- **Frontend**: a dedicated **Routines** page, own nav item — confirmed
+  direction: routines get their own interface for CRUD and completion, not a
+  sub-panel of an existing page. Layout is a **card list**: one card per
+  routine (name, step count, derived `estimated_minutes`, last-run summary),
+  each card exposing its own CRUD affordances (edit, delete, "Run",
+  "Schedule") directly — no separate detail page required for the common
+  actions, consistent with how `ChoreList`/`TodoList` render one row per
+  item today, just card-shaped instead of row-shaped to fit a step-count +
+  duration summary. Expanding a card (or a dedicated "Build" mode on it)
+  shows the step builder (reorder via drag → `position`, live total-estimate
+  display). Starting a run navigates to a focused **run view** (current
+  step, large running timer, Done/Skip/Pause/Abandon, whole-run timer
+  alongside) — reuse the pomodoro timer's `mm:ss` formatting helper
   (`Components/focus/session-timer.tsx`) rather than writing a second
   countdown formatter.
 
@@ -120,5 +126,8 @@ steps.
       links back to a `routine_runs` row.
 - [ ] Abandoning a run mid-sequence leaves completed steps' actuals intact
       and does not affect the routine definition itself.
+- [ ] The Routines page renders as a card list (one card per routine) with
+      edit/delete/Run/Schedule reachable directly from the card — no
+      required navigation to a separate detail page for those four actions.
 - [ ] Backend tests cover the full run lifecycle (start → advance × N →
       finish, and a separate skip + abandon path); `tsc` + web build clean.
