@@ -15,6 +15,9 @@ export const nonneg_int_from_input = z.coerce.number().int().nonnegative();
 
 /* ---------------------------------------------------------------- enums */
 
+// Retained only for non-event callers / the seed labels — events no longer
+// constrain event_type to this enum (spec 004: it's a free type_key validated
+// server-side against the user's event_types). Do not reintroduce it on events.
 export const event_type_schema = z.enum([
   "meeting",
   "task",
@@ -122,6 +125,33 @@ export const calendar_schema = z.object({
 export const calendar_list_schema = z.array(calendar_schema);
 export type Calendar = z.infer<typeof calendar_schema>;
 
+/* ---------------------------------------------------------- event types */
+
+/** User-defined + preset event types; `event_type` on events is a key into
+ * this set, not a fixed enum — see spec 004. */
+export const event_type_summary_schema = z.object({
+  id: z.string(),
+  key: z.string(),
+  label: z.string(),
+  color: calendar_color_schema,
+  is_preset: z.boolean(),
+  is_active: z.boolean(),
+  sort_order: z.number(),
+});
+export const event_type_summary_list_schema = z.array(event_type_summary_schema);
+export type EventTypeSummary = z.infer<typeof event_type_summary_schema>;
+
+export const event_type_create_schema = z.object({
+  label: z.string().min(1, "Label is required"),
+  color: calendar_color_schema,
+});
+export type EventTypeCreate = z.infer<typeof event_type_create_schema>;
+
+export type EventTypePatch = Partial<EventTypeCreate> & {
+  is_active?: boolean;
+  sort_order?: number;
+};
+
 /* --------------------------------------------------------------- events */
 
 export const event_create_schema = z
@@ -130,17 +160,29 @@ export const event_create_schema = z
     description: z.string().optional(),
     location: z.string().optional(),
     calendar_id: z.string().optional(),
-    event_type: event_type_schema,
+    /* event_type is a type_key string validated server-side against the
+     * user's active event_types (unknown key -> 422); no client enum. */
+    event_type: z.string().min(1, "Type is required"),
     attention_class: attention_class_schema.optional(),
     start_at: z.string().min(1, "Start time is required"),
     end_at: z.string().min(1, "End time is required"),
     is_all_day: z.boolean().optional(),
     estimated_minutes: z.number().int().positive().optional(),
+    is_recurring: z.boolean().optional(),
+    recurrence_weekdays: z.array(z.number().int().min(0).max(6)).optional(),
+    recurrence_end: z.string().optional(),
   })
   .refine((value) => value.end_at > value.start_at, {
     message: "End must be after start",
     path: ["end_at"],
-  });
+  })
+  .refine(
+    (value) => !value.is_recurring || (value.recurrence_weekdays?.length ?? 0) > 0,
+    {
+      message: "Pick at least one day",
+      path: ["recurrence_weekdays"],
+    },
+  );
 export type EventCreate = z.infer<typeof event_create_schema>;
 
 export const event_schema = z.object({
@@ -149,7 +191,7 @@ export const event_schema = z.object({
   description: z.string().nullish(),
   location: z.string().nullish(),
   calendar_id: z.string(),
-  event_type: event_type_schema,
+  event_type: z.string(),
   attention_class: attention_class_schema,
   canvas_event_type: canvas_event_type_schema,
   start_at: z.string(),
@@ -159,13 +201,34 @@ export const event_schema = z.object({
   status: event_status_schema,
   actual_minutes: z.number().nullable(),
   residual_of: z.string().nullable(),
+  is_recurring: z.boolean().nullish(),
+  recurrence_weekdays: z.array(z.number()).nullish(),
+  recurrence_end: z.string().nullable(),
+  master_event_id: z.string().nullable(),
+  occurrence_date: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });
 export const event_list_schema = z.array(event_schema);
 export type CalendarEvent = z.infer<typeof event_schema>;
 
-export type EventPatch = Partial<EventCreate> & { status?: EventStatus };
+export const event_title_suggestion_schema = z.object({
+  title: z.string(),
+  occurrence_count: z.number(),
+  avg_minutes: z.number().nullable(),
+});
+export const event_title_suggestion_list_schema = z.array(event_title_suggestion_schema);
+export type EventTitleSuggestion = z.infer<typeof event_title_suggestion_schema>;
+
+export type EventPatch = Partial<EventCreate> & {
+  status?: EventStatus;
+  actual_minutes?: number;
+};
+
+export const event_split_response_schema = z.object({
+  first: event_schema,
+  second: event_schema,
+});
 
 /* --------------------------------------------------------------- chores */
 
@@ -208,6 +271,8 @@ export const chore_schema = z.object({
   is_active: z.boolean(),
   last_completed_at: z.string().nullable(),
   next_due_at: z.string().nullable(),
+  days_until_due: z.number().nullable(),
+  recommended_n: z.number().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -263,6 +328,49 @@ export const schedule_run_detail_schema = schedule_run_schema.extend({
 export type ScheduleRunDetail = z.infer<typeof schedule_run_detail_schema>;
 
 export const schedule_apply_schema = z.object({ events_created: z.number() });
+
+/* ----------------------------------------------------------------- todos */
+
+/** A lightweight to-do, separate from calendar events. `schedule_todo`
+ * funnels one into an Event — see event_schema / TodoScheduleResponse. */
+export const todo_schema = z.object({
+  id: z.string(),
+  title: z.string(),
+  estimated_minutes: z.number().nullable(),
+  is_done: z.boolean(),
+  scheduled_event_id: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export const todo_list_schema = z.array(todo_schema);
+export type Todo = z.infer<typeof todo_schema>;
+
+export const todo_create_schema = z.object({
+  title: z.string().min(1, "Title is required"),
+  estimated_minutes: z.number().int().positive().optional(),
+});
+export type TodoCreate = z.infer<typeof todo_create_schema>;
+
+export type TodoPatch = Partial<TodoCreate> & { is_done?: boolean };
+
+export const todo_schedule_request_schema = z
+  .object({
+    start_at: z.string().min(1, "Start time is required"),
+    end_at: z.string().min(1, "End time is required"),
+    event_type: z.string().min(1, "Type is required"),
+    attention_class: attention_class_schema.optional(),
+  })
+  .refine((value) => value.end_at > value.start_at, {
+    message: "End must be after start",
+    path: ["end_at"],
+  });
+export type TodoScheduleRequest = z.infer<typeof todo_schedule_request_schema>;
+
+export const todo_schedule_response_schema = z.object({
+  todo: todo_schema,
+  event: event_schema,
+});
+export type TodoScheduleResponse = z.infer<typeof todo_schedule_response_schema>;
 
 /* ------------------------------------------------------------- pomodoro */
 
@@ -370,6 +478,25 @@ export const timebox_response_schema = z.object({
 });
 export type TimeboxResponse = z.infer<typeof timebox_response_schema>;
 
+export const llm_provider_kind_schema = z.enum(["ollama", "openai_compat"]);
+export type LlmProviderKind = z.infer<typeof llm_provider_kind_schema>;
+
+export const llm_settings_in_schema = z.object({
+  provider_kind: llm_provider_kind_schema,
+  base_url: z.string().min(1, "Base URL is required").max(500),
+  model: z.string().min(1, "Model is required").max(200),
+  api_key: z.string().max(500).optional(),
+});
+export type LlmSettingsIn = z.infer<typeof llm_settings_in_schema>;
+
+export const llm_settings_out_schema = z.object({
+  provider_kind: llm_provider_kind_schema,
+  base_url: z.string(),
+  model: z.string(),
+  has_api_key: z.boolean(),
+});
+export type LlmSettingsOut = z.infer<typeof llm_settings_out_schema>;
+
 /* --------------------------------------------------------------- health */
 
 export const health_schema = z.object({
@@ -378,3 +505,226 @@ export const health_schema = z.object({
 });
 
 export const empty_schema = z.void();
+
+/* ---- routines ---- */
+
+/** A reusable ordered step sequence (spec 013). `estimated_minutes` is
+ * always server-derived (sum of live steps) — never independently editable.
+ */
+export const routine_step_schema = z.object({
+  id: z.string(),
+  routine_id: z.string(),
+  position: z.number(),
+  name: z.string(),
+  estimated_minutes: z.number(),
+  is_optional: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export const routine_step_list_schema = z.array(routine_step_schema);
+export type RoutineStep = z.infer<typeof routine_step_schema>;
+
+export const routine_step_create_schema = z.object({
+  name: z.string().min(1, "Step name is required"),
+  estimated_minutes: z.number().int().positive("Must be > 0"),
+  is_optional: z.boolean().optional(),
+});
+export type RoutineStepCreate = z.infer<typeof routine_step_create_schema>;
+
+export type RoutineStepPatch = Partial<RoutineStepCreate>;
+
+export const routine_step_reorder_schema = z.object({
+  ordered_step_ids: z.array(z.string()).min(1),
+});
+export type RoutineStepReorder = z.infer<typeof routine_step_reorder_schema>;
+
+export const routine_schema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  color: calendar_color_schema,
+  is_active: z.boolean(),
+  step_count: z.number(),
+  estimated_minutes: z.number().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export const routine_list_schema = z.array(routine_schema);
+export type Routine = z.infer<typeof routine_schema>;
+
+export const routine_create_schema = z.object({
+  name: z.string().min(1, "Name is required"),
+  description: z.string().optional(),
+  color: calendar_color_schema,
+});
+export type RoutineCreate = z.infer<typeof routine_create_schema>;
+
+export type RoutinePatch = Partial<RoutineCreate> & { is_active?: boolean };
+
+export const routine_run_status_schema = z.enum([
+  "pending",
+  "in_progress",
+  "completed",
+  "abandoned",
+]);
+export type RoutineRunStatus = z.infer<typeof routine_run_status_schema>;
+
+export const routine_step_run_status_schema = z.enum([
+  "pending",
+  "active",
+  "done",
+  "skipped",
+]);
+export type RoutineStepRunStatus = z.infer<typeof routine_step_run_status_schema>;
+
+export const routine_step_run_schema = z.object({
+  id: z.string(),
+  routine_step_id: z.string(),
+  status: routine_step_run_status_schema,
+  step_name: z.string(),
+  estimated_minutes: z.number(),
+  is_optional: z.boolean(),
+  started_at: z.string().nullable(),
+  ended_at: z.string().nullable(),
+  actual_minutes: z.number().nullable(),
+});
+export type RoutineStepRun = z.infer<typeof routine_step_run_schema>;
+
+export const routine_run_schema = z.object({
+  id: z.string(),
+  routine_id: z.string(),
+  status: routine_run_status_schema,
+  started_at: z.string(),
+  ended_at: z.string().nullable(),
+  total_actual_minutes: z.number().nullable(),
+  event_id: z.string().nullable(),
+  steps: z.array(routine_step_run_schema),
+});
+export const routine_run_list_schema = z.array(routine_run_schema);
+export type RoutineRun = z.infer<typeof routine_run_schema>;
+
+export const routine_advance_request_schema = z.object({
+  actual_minutes: z.number().int().nonnegative().optional(),
+  skipped: z.boolean().optional(),
+});
+export type RoutineAdvanceRequest = z.infer<typeof routine_advance_request_schema>;
+
+export const routine_schedule_request_schema = z.object({
+  start_at: z.string().min(1, "Start time is required"),
+  event_type: z.string().min(1, "Type is required"),
+  attention_class: attention_class_schema.optional(),
+});
+export type RoutineScheduleRequest = z.infer<typeof routine_schedule_request_schema>;
+
+export const routine_schedule_response_schema = z.object({
+  run: routine_run_schema,
+  event: event_schema,
+});
+export type RoutineScheduleResponse = z.infer<typeof routine_schedule_response_schema>;
+
+/* --------------------------------------------------- spec 012: chore entropy */
+/* Appended block — do not reformat the rest of this file around it. */
+
+export const chore_complete_schema = z.object({
+  completed_at: z.string().optional(),
+});
+export type ChoreComplete = z.infer<typeof chore_complete_schema>;
+
+/* ---- canvas ---- */
+/* spec 010: Radial Canvas — timer/stopwatch items directly CRUD-able on
+ * their own canvas, optionally linked to an event. Appended block — do not
+ * reformat the rest of this file around it. */
+
+export const canvas_mode_schema = z.enum(["timer", "stopwatch"]);
+export type CanvasMode = z.infer<typeof canvas_mode_schema>;
+
+export const canvas_status_schema = z.enum(["running", "paused", "completed"]);
+export type CanvasStatus = z.infer<typeof canvas_status_schema>;
+
+export const canvas_alarm_class_schema = z.enum([
+  "passive_check",
+  "focus_checkpoint",
+  "break",
+  "refresh",
+]);
+export type CanvasAlarmClass = z.infer<typeof canvas_alarm_class_schema>;
+
+export const canvas_alarm_status_schema = z.enum([
+  "pending",
+  "fired",
+  "acknowledged",
+  "snoozed",
+  "dismissed",
+]);
+export type CanvasAlarmStatus = z.infer<typeof canvas_alarm_status_schema>;
+
+export const canvas_item_schema = z.object({
+  id: z.string(),
+  title: z.string(),
+  mode: canvas_mode_schema,
+  duration_seconds: z.number().nullable(),
+  accumulated_seconds: z.number(),
+  elapsed_seconds: z.number(),
+  started_at: z.string().nullable(),
+  status: canvas_status_schema,
+  event_id: z.string().nullable(),
+  attention_class: attention_class_schema,
+  canvas_event_type: z.string().nullable(),
+  r: z.number(),
+  theta: z.number(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export type CanvasItem = z.infer<typeof canvas_item_schema>;
+export const canvas_item_list_schema = z.array(canvas_item_schema);
+
+export const canvas_item_create_schema = z
+  .object({
+    title: z.string().min(1, "Title is required").max(300),
+    mode: canvas_mode_schema,
+    duration_seconds: z.number().int().positive().optional(),
+    attention_class: attention_class_schema.optional(),
+    event_id: z.string().optional(),
+    r: z.number().min(0).max(1).optional(),
+    theta: z.number().min(0).max(360).optional(),
+  })
+  .refine((value) => value.mode !== "timer" || value.duration_seconds !== undefined, {
+    message: "Duration is required for a timer",
+    path: ["duration_seconds"],
+  });
+export type CanvasItemCreate = z.infer<typeof canvas_item_create_schema>;
+
+export const canvas_item_patch_schema = z.object({
+  title: z.string().min(1).max(300).optional(),
+  duration_seconds: z.number().int().positive().optional(),
+  r: z.number().min(0).max(1).optional(),
+  theta: z.number().min(0).max(360).optional(),
+});
+export type CanvasItemPatch = z.infer<typeof canvas_item_patch_schema>;
+
+export const canvas_alarm_schema = z.object({
+  id: z.string(),
+  canvas_item_id: z.string(),
+  alarm_class: canvas_alarm_class_schema,
+  label: z.string().nullable(),
+  offset_seconds: z.number(),
+  fires_at: z.string(),
+  status: canvas_alarm_status_schema,
+  fired_at: z.string().nullable(),
+  acknowledged_at: z.string().nullable(),
+  snoozed_until: z.string().nullable(),
+});
+export type CanvasAlarm = z.infer<typeof canvas_alarm_schema>;
+
+export const canvas_alarm_create_schema = z.object({
+  alarm_class: canvas_alarm_class_schema,
+  label: z.string().max(80).optional(),
+  offset_seconds: z.number().int(),
+});
+export type CanvasAlarmCreate = z.infer<typeof canvas_alarm_create_schema>;
+
+export const canvas_alarm_patch_schema = z.object({
+  status: canvas_alarm_status_schema.optional(),
+  snoozed_until: z.string().optional(),
+});
+export type CanvasAlarmPatch = z.infer<typeof canvas_alarm_patch_schema>;

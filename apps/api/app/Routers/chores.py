@@ -4,8 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.Core.database import get_session
 from app.Routers.deps import SessionContext, get_session_context
-from app.Schemas.chore import ChoreCreate, ChoreOut, ChorePatch
-from app.Services import chore_service
+from app.Schemas.chore import ChoreComplete, ChoreCreate, ChoreOut, ChorePatch
+from app.Services import chore_entropy_service, chore_service
 
 router = APIRouter(prefix="/chores", tags=["chores"])
 
@@ -36,6 +36,21 @@ async def patch_chore(
 ) -> ChoreOut:
     try:
         return await chore_service.patch_chore(db, ctx.user_id, ctx.data_key, chore_id, payload)
+    except chore_service.ChoreError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+
+
+@router.post("/{chore_id}/complete", response_model=ChoreOut)
+async def complete_chore(
+    chore_id: str,
+    payload: ChoreComplete,
+    ctx: SessionContext = Depends(get_session_context),
+    db: AsyncSession = Depends(get_session),
+) -> ChoreOut:
+    try:
+        return await chore_entropy_service.record_completion(
+            db, ctx.user_id, ctx.data_key, chore_id, payload.completed_at
+        )
     except chore_service.ChoreError as exc:
         raise HTTPException(exc.status_code, exc.detail) from exc
 

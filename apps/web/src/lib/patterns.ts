@@ -5,3 +5,6 @@ export const time_hhmm_pattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 /** Value emitted by <input type="datetime-local">, minute precision. */
 export const datetime_local_pattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
+/** Value emitted by <input type="date">, e.g. "2026-07-15". */
+export const date_ymd_pattern = /^\d{4}-\d{2}-\d{2}$/;

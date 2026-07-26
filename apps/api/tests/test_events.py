@@ -1,7 +1,10 @@
 """Event CRUD, canvas-type auto-assignment, and encryption at rest."""
+from datetime import datetime
+
 import aiosqlite
 
 from app.Core.config import settings
+from app.Pipelines.recurrence import expand_occurrences
 
 _WEEK = {"start": "2026-07-13T00:00:00Z", "end": "2026-07-20T00:00:00Z"}
 
@@ -72,6 +75,32 @@ async def test_canvas_type_overlap_rules(unlocked) -> None:
     assert meeting.json()["canvas_event_type"] == "involved_only"
 
 
+async def test_all_day_event_excluded_from_timed_overlap(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    meeting = await client.post(
+        "/events", json=_event_payload(title="Standup"), headers=headers
+    )
+    assert meeting.json()["canvas_event_type"] == "focus_only"
+
+    holiday = await client.post(
+        "/events",
+        json=_event_payload(
+            title="Public Holiday",
+            event_type="personal",
+            attention_class="passive",
+            start_at="2026-07-14T00:00:00Z",
+            end_at="2026-07-15T00:00:00Z",
+            is_all_day=True,
+        ),
+        headers=headers,
+    )
+    assert holiday.status_code == 201, holiday.text
+    assert holiday.json()["is_all_day"] is True
+
+    refreshed = await client.get(f"/events/{meeting.json()['id']}", headers=headers)
+    assert refreshed.json()["canvas_event_type"] == "focus_only"
+
+
 async def test_titles_encrypted_at_rest(unlocked) -> None:
     client, _keyfile, headers = unlocked
     secret_title = "Very private appointment xyzzy"
@@ -124,3 +153,324 @@ async def test_canvas_type_reverts_when_peer_moves_away(unlocked) -> None:
     )
     refreshed = await client.get(f"/events/{laundry.json()['id']}", headers=headers)
     assert refreshed.json()["canvas_event_type"] == "passive_multi"
+
+
+def test_expand_occurrences_weekly_mon_wed_bounded() -> None:
+    """Mon/Wed weekly rule anchored on a Monday, expanded over a 2-week window."""
+    anchor_start = datetime(2026, 7, 13, 9, 0)  # a Monday
+    anchor_end = datetime(2026, 7, 13, 10, 0)
+    weekdays = frozenset({1, 3})  # Sun=0 convention: Mon=1, Wed=3
+    window_start = datetime(2026, 7, 13, 0, 0)
+    window_end = datetime(2026, 7, 27, 0, 0)  # exclusive, 2 weeks
+
+    occurrences = expand_occurrences(
+        anchor_start, anchor_end, weekdays, None, window_start, window_end
+    )
+
+    dates = [occ.occurrence_date.isoformat() for occ in occurrences]
+    assert dates == ["2026-07-13", "2026-07-15", "2026-07-20", "2026-07-22"]
+    for occ in occurrences:
+        assert occ.start_at.time() == anchor_start.time()
+        assert occ.end_at - occ.start_at == anchor_end - anchor_start
+    assert isinstance(occurrences, tuple)
+    assert len(occurrences) < 400
+
+
+async def test_recurring_event_expands_within_week(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post(
+        "/events",
+        json=_event_payload(
+            title="Standup",
+            start_at="2026-07-13T09:00:00Z",
+            end_at="2026-07-13T09:30:00Z",
+            is_recurring=True,
+            recurrence_weekdays=[1, 3],  # Mon, Wed
+            recurrence_end="2026-07-31T23:59:00Z",
+        ),
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    master = created.json()
+    assert master["is_recurring"] is True
+    assert master["recurrence_weekdays"] == [1, 3]
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    assert listed.status_code == 200, listed.text
+    occurrences = listed.json()
+    assert len(occurrences) == 2
+
+    occurrence_dates = sorted(occ["occurrence_date"] for occ in occurrences)
+    assert occurrence_dates == ["2026-07-13", "2026-07-15"]
+    for occ in occurrences:
+        assert occ["id"] == master["id"]
+        assert occ["master_event_id"] == master["id"]
+        assert occ["is_recurring"] is True
+        assert occ["start_at"].endswith("T09:00:00Z")
+        assert occ["end_at"].endswith("T09:30:00Z")
+
+
+def _recurring_payload(**overrides: object) -> dict[str, object]:
+    return _event_payload(
+        title="Standup",
+        start_at="2026-07-13T09:00:00Z",  # Monday
+        end_at="2026-07-13T09:30:00Z",
+        is_recurring=True,
+        recurrence_weekdays=[1, 3, 5],  # Mon, Wed, Fri
+        **overrides,
+    )
+
+
+async def test_delete_scope_occurrence_removes_only_that_date(unlocked) -> None:
+    """(a) scope=occurrence on the Wed date -> Wed gone, Mon+Fri remain."""
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    master_id = created.json()["id"]
+
+    deleted = await client.delete(
+        f"/events/{master_id}",
+        params={"scope": "occurrence", "occurrence_date": "2026-07-15"},
+        headers=headers,
+    )
+    assert deleted.status_code == 204
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    dates = sorted(occ["occurrence_date"] for occ in listed.json())
+    assert dates == ["2026-07-13", "2026-07-17"]
+
+
+async def test_delete_scope_following_cuts_series(unlocked) -> None:
+    """(b) scope=following on the Wed date -> Mon remains, Wed+Fri gone; the
+    master's recurrence_end moves to just before the cutoff date."""
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    master = created.json()
+    assert master["recurrence_end"] is None
+
+    deleted = await client.delete(
+        f"/events/{master['id']}",
+        params={"scope": "following", "occurrence_date": "2026-07-15"},
+        headers=headers,
+    )
+    assert deleted.status_code == 204
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    dates = sorted(occ["occurrence_date"] for occ in listed.json())
+    assert dates == ["2026-07-13"]
+
+    refreshed = await client.get(f"/events/{master['id']}", headers=headers)
+    assert refreshed.json()["recurrence_end"] == "2026-07-14T23:59:59Z"
+
+
+async def test_delete_scope_following_from_first_occurrence_removes_series(unlocked) -> None:
+    """Cutting "following" from the very first occurrence leaves nothing to
+    keep, so the whole master is soft-deleted instead of a no-op cutoff."""
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    master_id = created.json()["id"]
+
+    deleted = await client.delete(
+        f"/events/{master_id}",
+        params={"scope": "following", "occurrence_date": "2026-07-13"},
+        headers=headers,
+    )
+    assert deleted.status_code == 204
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    assert listed.json() == []
+    gone = await client.get(f"/events/{master_id}", headers=headers)
+    assert gone.status_code == 404
+
+
+async def test_delete_scope_all_removes_whole_series(unlocked) -> None:
+    """(c) scope=all (default) -> whole series gone."""
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    master_id = created.json()["id"]
+
+    deleted = await client.delete(f"/events/{master_id}", headers=headers)
+    assert deleted.status_code == 204
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    assert listed.json() == []
+
+
+async def test_delete_non_recurring_event_regression(unlocked) -> None:
+    """(d) deleting a non-recurring event still works as before."""
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_event_payload(), headers=headers)
+    event_id = created.json()["id"]
+
+    deleted = await client.delete(f"/events/{event_id}", headers=headers)
+    assert deleted.status_code == 204
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    assert listed.json() == []
+
+
+async def test_delete_occurrence_scope_requires_occurrence_date(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    master_id = created.json()["id"]
+
+    bad = await client.delete(
+        f"/events/{master_id}", params={"scope": "occurrence"}, headers=headers
+    )
+    assert bad.status_code == 400
+
+
+async def test_delete_following_scope_requires_occurrence_date(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    master_id = created.json()["id"]
+
+    bad = await client.delete(
+        f"/events/{master_id}", params={"scope": "following"}, headers=headers
+    )
+    assert bad.status_code == 400
+
+
+async def test_recurring_event_listing_is_deterministic(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    await client.post(
+        "/events",
+        json=_event_payload(
+            title="Standup",
+            start_at="2026-07-13T09:00:00Z",
+            end_at="2026-07-13T09:30:00Z",
+            is_recurring=True,
+            recurrence_weekdays=[1, 3],
+        ),
+        headers=headers,
+    )
+
+    first = await client.get("/events", params=_WEEK, headers=headers)
+    second = await client.get("/events", params=_WEEK, headers=headers)
+    assert first.json() == second.json()
+
+
+async def test_title_suggestions_group_and_average(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    # two "Gym" events with estimated durations, one "Dentist"
+    for start, end, mins in [
+        ("2026-07-14T07:00:00Z", "2026-07-14T08:00:00Z", 60),
+        ("2026-07-16T07:00:00Z", "2026-07-16T08:30:00Z", 90),
+    ]:
+        await client.post(
+            "/events",
+            json={"title": "Gym", "event_type": "physical", "attention_class": "involved",
+                  "start_at": start, "end_at": end, "estimated_minutes": mins},
+            headers=headers,
+        )
+    await client.post(
+        "/events",
+        json=_event_payload(title="Dentist", start_at="2026-07-15T09:00:00Z",
+                            end_at="2026-07-15T09:30:00Z"),
+        headers=headers,
+    )
+    res = await client.get("/events/titles", headers=headers)
+    assert res.status_code == 200, res.text
+    by_title = {row["title"]: row for row in res.json()}
+    assert by_title["Gym"]["occurrence_count"] == 2
+    assert by_title["Gym"]["avg_minutes"] == 75  # (60 + 90) / 2
+    assert by_title["Dentist"]["occurrence_count"] == 1
+    # most frequent first
+    assert res.json()[0]["title"] == "Gym"
+
+
+async def test_split_event_creates_two_adjacent_events(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post(
+        "/events",
+        json=_event_payload(
+            title="Deep work block",
+            start_at="2026-07-14T14:00:00Z",
+            end_at="2026-07-14T16:00:00Z",
+            estimated_minutes=120,
+        ),
+        headers=headers,
+    )
+    event_id = created.json()["id"]
+    await client.patch(f"/events/{event_id}", json={"actual_minutes": 90}, headers=headers)
+
+    split = await client.post(
+        f"/events/{event_id}/split",
+        json={"split_at": "2026-07-14T15:00:00Z"},
+        headers=headers,
+    )
+    assert split.status_code == 200, split.text
+    body = split.json()
+    first, second = body["first"], body["second"]
+
+    assert first["id"] == event_id
+    assert first["start_at"] == "2026-07-14T14:00:00Z"
+    assert first["end_at"] == "2026-07-14T15:00:00Z"
+    assert first["estimated_minutes"] is None
+    assert first["actual_minutes"] is None
+    assert first["title"] == "Deep work block"
+
+    assert second["id"] != event_id
+    assert second["start_at"] == "2026-07-14T15:00:00Z"
+    assert second["end_at"] == "2026-07-14T16:00:00Z"
+    assert second["title"] == "Deep work block"
+    assert second["estimated_minutes"] is None
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    assert sorted(e["id"] for e in listed.json()) == sorted([first["id"], second["id"]])
+
+
+async def test_split_event_rejects_out_of_range_point(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post(
+        "/events",
+        json=_event_payload(start_at="2026-07-14T14:00:00Z", end_at="2026-07-14T16:00:00Z"),
+        headers=headers,
+    )
+    event_id = created.json()["id"]
+
+    before_start = await client.post(
+        f"/events/{event_id}/split",
+        json={"split_at": "2026-07-14T13:00:00Z"},
+        headers=headers,
+    )
+    assert before_start.status_code == 400
+
+    at_end = await client.post(
+        f"/events/{event_id}/split",
+        json={"split_at": "2026-07-14T16:00:00Z"},
+        headers=headers,
+    )
+    assert at_end.status_code == 400
+
+
+async def test_split_recurring_event_rejected(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_recurring_payload(), headers=headers)
+    event_id = created.json()["id"]
+
+    split = await client.post(
+        f"/events/{event_id}/split",
+        json={"split_at": "2026-07-13T09:15:00Z"},
+        headers=headers,
+    )
+    assert split.status_code == 409
+
+
+async def test_patch_actual_minutes_and_move(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post("/events", json=_event_payload(), headers=headers)
+    event_id = created.json()["id"]
+
+    logged = await client.patch(
+        f"/events/{event_id}", json={"actual_minutes": 42}, headers=headers
+    )
+    assert logged.status_code == 200
+    assert logged.json()["actual_minutes"] == 42
+
+    # move to tomorrow: shift start/end +1 day
+    moved = await client.patch(
+        f"/events/{event_id}",
+        json={"start_at": "2026-07-15T09:00:00Z", "end_at": "2026-07-15T10:30:00Z"},
+        headers=headers,
+    )
+    assert moved.json()["start_at"] == "2026-07-15T09:00:00Z"

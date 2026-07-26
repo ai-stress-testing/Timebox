@@ -3,8 +3,10 @@ import { EventDrawer } from "../Components/calendar/event-drawer";
 import type { DrawerTarget } from "../Components/calendar/event-drawer";
 import { WeekGrid } from "../Components/calendar/week-grid";
 import { Button } from "../Components/ui/button";
+import { use_event_types } from "../Hooks/use-event-types";
 import { use_events_range } from "../Hooks/use-events";
 import type { CalendarEvent } from "../lib/api-schemas";
+import { build_event_color_map } from "../lib/dispatch-maps/event-colors";
 import { add_days, format_week_title, to_iso, week_range } from "../lib/time";
 import { to_error_message } from "../Services/api-client";
 
@@ -30,6 +32,8 @@ export function CalendarPage() {
   const [target, set_target] = useState<DrawerTarget | null>(null);
   const range = week_range(anchor);
   const events = use_events_range(to_iso(range.start), to_iso(range.end));
+  const event_types = use_event_types();
+  const color_map = build_event_color_map(event_types.data ?? []);
 
   const handle_event = (event: CalendarEvent) => set_target({ kind: "edit", event });
   const handle_slot = (start: Date) => set_target({ kind: "create", start });
@@ -49,6 +53,7 @@ export function CalendarPage() {
       <WeekGrid
         range={range}
         events={events.data ?? []}
+        color_map={color_map}
         on_slot={handle_slot}
         on_event={handle_event}
       />

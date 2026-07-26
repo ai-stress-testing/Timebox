@@ -1,18 +1,42 @@
 import type { CalendarEvent } from "../../lib/api-schemas";
+import type { EventColorMap } from "../../lib/dispatch-maps/event-colors";
+import { use_now } from "../../Hooks/use-now";
 import {
   day_start_hour,
   format_day_label,
   format_hour_label,
   is_same_day,
+  now_top_pct,
   slot_start,
   visible_hours,
 } from "../../lib/time";
 import type { WeekRange } from "../../lib/time";
+import { AllDayStrip } from "./all-day-strip";
 import { EventBlock } from "./event-block";
+
+/** The now-line re-reads the clock this often; it trails, it doesn't animate. */
+const now_line_refresh_ms = 15 * 60 * 1000;
+
+/** Red marker for the current moment — only rendered in today's column. */
+function NowLine({ day }: { day: Date }) {
+  const now = use_now(now_line_refresh_ms);
+  if (!is_same_day(day, now)) return null;
+  const top_pct = now_top_pct(now, day);
+  if (top_pct === null) return null;
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-x-0 z-20 h-(--tb-now-line-height)
+        bg-danger shadow-glow-danger"
+      style={{ top: `calc(${top_pct}% - (var(--tb-now-line-height) / 2))` }}
+    />
+  );
+}
 
 type WeekGridProps = {
   range: WeekRange;
   events: CalendarEvent[];
+  color_map: EventColorMap;
   on_slot: (start: Date) => void;
   on_event: (event: CalendarEvent) => void;
 };
@@ -22,7 +46,7 @@ const hour_rows = Array.from({ length: visible_hours }, (_, i) => day_start_hour
 function HourGutter() {
   return (
     <div aria-hidden="true">
-      <div className="h-8" />
+      <div className="sticky top-(--tb-header-height) z-30 h-8 border-b border-edge bg-surface-1" />
       {hour_rows.map((hour) => (
         <div key={hour} className="h-(--tb-hour-height) pr-2 text-right font-mono text-xs text-low">
           {format_hour_label(hour)}
@@ -32,9 +56,10 @@ function HourGutter() {
   );
 }
 
-function DayColumn({ day, events, on_slot, on_event }: {
+function DayColumn({ day, events, color_map, on_slot, on_event }: {
   day: Date;
   events: CalendarEvent[];
+  color_map: EventColorMap;
   on_slot: (start: Date) => void;
   on_event: (event: CalendarEvent) => void;
 }) {
@@ -42,7 +67,8 @@ function DayColumn({ day, events, on_slot, on_event }: {
   return (
     <div className="min-w-0 border-l border-edge">
       <div
-        className={`flex h-8 items-center justify-center text-xs font-semibold
+        className={`sticky top-(--tb-header-height) z-30 flex h-8 items-center
+          justify-center border-b border-edge bg-surface-1 text-xs font-semibold
           ${today ? "text-accent-2" : "text-mid"}`}
       >
         {format_day_label(day)}
@@ -60,23 +86,51 @@ function DayColumn({ day, events, on_slot, on_event }: {
           />
         ))}
         {events.map((event) => (
-          <EventBlock key={event.id} event={event} day={day} on_select={on_event} />
+          <EventBlock
+            key={`${event.id}:${event.start_at}`}
+            event={event}
+            day={day}
+            color_map={color_map}
+            on_select={on_event}
+          />
         ))}
+        <NowLine day={day} />
       </div>
     </div>
   );
 }
 
-export function WeekGrid({ range, events, on_slot, on_event }: WeekGridProps) {
+/** Timed events drive the hour grid; all-day events render only in the strip above it. */
+function split_by_all_day(events: CalendarEvent[]): {
+  timed: CalendarEvent[];
+  all_day: CalendarEvent[];
+} {
+  const all_day = events.filter((event) => event.is_all_day === true);
+  const timed = events.filter((event) => event.is_all_day !== true);
+  return { timed, all_day };
+}
+
+export function WeekGrid({ range, events, color_map, on_slot, on_event }: WeekGridProps) {
+  const { timed, all_day } = split_by_all_day(events);
   return (
-    <div
-      className="grid overflow-x-auto rounded-lg border border-edge bg-surface-1"
-      style={{ gridTemplateColumns: "var(--tb-gutter-width) repeat(7, minmax(0, 1fr))" }}
-    >
-      <HourGutter />
-      {range.days.map((day) => (
-        <DayColumn key={day.toISOString()} day={day} events={events} on_slot={on_slot} on_event={on_event} />
-      ))}
+    <div className="rounded-lg border border-edge bg-surface-1">
+      <AllDayStrip days={range.days} events={all_day} color_map={color_map} on_event={on_event} />
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: "var(--tb-gutter-width) repeat(7, minmax(0, 1fr))" }}
+      >
+        <HourGutter />
+        {range.days.map((day) => (
+          <DayColumn
+            key={day.toISOString()}
+            day={day}
+            events={timed}
+            color_map={color_map}
+            on_slot={on_slot}
+            on_event={on_event}
+          />
+        ))}
+      </div>
     </div>
   );
 }

@@ -57,6 +57,7 @@
 
   --shadow-glow: var(--tb-glow-accent);
   --shadow-glow-soft: var(--tb-glow-soft);
+  --shadow-glow-danger: var(--tb-glow-danger);
   --shadow-raised: var(--tb-shadow-raised);
 
   --animate-drawer-in: tb-drawer-in var(--tb-dur-base) var(--tb-ease-spring);

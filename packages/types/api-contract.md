@@ -11,7 +11,6 @@ Auth: `Authorization: Bearer <token>` on every route **except**
 ## Enums
 
 ```
-event_type       = meeting | task | personal | chore | homework | passive | physical
 attention_class  = active | involved | passive
 canvas_event_type= focus_only | involved_only | passive_multi | focus_passive
 event_status     = scheduled | in_progress | completed | skipped | cancelled
@@ -20,6 +19,7 @@ occurrence_status= proposed | scheduled | in_progress | completed | missed | hea
 run_status       = pending | running | completed | failed | superseded
 pomodoro_status  = active | completed | abandoned
 prompt_status    = pending | confirmed | completed | timed_out | dismissed
+llm_provider_kind= ollama | openai_compat
 ```
 
 ## Vault
@@ -50,19 +50,56 @@ must state that losing it makes the data unrecoverable.
 `Calendar = { id, name, color: calendar_color|null, is_visible, created_at, updated_at }`
 (`color: null` marks the default calendar, auto-created on first unlock.)
 
+## Event Types
+
+User-defined event types (spec 004 / GH #26). `GET /event-types` seeds the 7
+built-in presets for the caller on first call (idempotent — a no-op once any
+row exists). Presets are recolorable/hideable (`PATCH`) but **not deletable**
+(`DELETE` → 409). `key` is a server-derived slug from `label`, unique per
+user among live rows; a colliding label gets a numeric suffix (`-2`, `-3`, …).
+
+| Route | Notes |
+|---|---|
+| `GET /event-types` | active types for the user, ordered by `sort_order` then `created_at` → `EventTypeSummary[]` |
+| `POST /event-types` | `EventTypeCreate` → `EventTypeSummary` (201) · 409 if a unique key cannot be derived |
+| `PATCH /event-types/{id}` | `EventTypePatch` → `EventTypeSummary` · 404 if missing |
+| `DELETE /event-types/{id}` | soft-delete a custom type → 204 · 404 if missing · **409 if `is_preset`** |
+
+```ts
+type EventTypeSummary = {
+  id: string; key: string; label: string; color: calendar_color;
+  is_preset: boolean; is_active: boolean; sort_order: number;
+};
+type EventTypeCreate = { label: string; color: calendar_color };   // label 1..80 chars
+type EventTypePatch = {
+  label?: string; color?: calendar_color; is_active?: boolean; sort_order?: number;
+};
+```
+
+Preset seed (`key` → `color`, in this `sort_order`): `meeting` → `sky`,
+`task` → `violet`, `personal` → `emerald`, `chore` → `amber`,
+`homework` → `rose`, `passive` → `slate`, `physical` → `orange`. Preset
+`label` is the capitalized key (e.g. `"meeting"` → `"Meeting"`).
+
 ## Events
+
+**Breaking change:** `event_type` is no longer the static `EventType` enum —
+it is a free-form `type_key` string, validated server-side against the
+caller's **active** `event_types.key` values (unknown key on
+create/patch → 422). `GET /event-types` is the source of truth for the
+selectable set; there is no client-side enum to validate against anymore.
 
 | Route | Notes |
 |---|---|
 | `GET /events?start=iso&end=iso` | events overlapping the range → `Event[]` |
-| `POST /events` | `EventCreate` → `Event` (201) |
+| `POST /events` | `EventCreate` → `Event` (201) · 422 if `event_type` is not a known key |
 | `GET /events/{id}` · `PATCH /events/{id}` (partial `EventCreate` + `status`) · `DELETE` → 204 |
 
 ```ts
 type EventCreate = {
   title: string; description?: string; location?: string;
   calendar_id?: string;                 // default calendar if omitted
-  event_type: EventType;
+  event_type: string;                   // type_key — see Event Types; min 1 char
   attention_class?: AttentionClass;     // default "active"
   start_at: string; end_at: string;     // end > start
   is_all_day?: boolean;
@@ -156,12 +193,21 @@ type TaskResidual = {
 };
 ```
 
-## AI (Ollama only)
+## AI (local runtimes only — Ollama or any OpenAI-compatible endpoint)
+
+The effective provider for `/ai/health` and `/ai/timebox` is the caller's
+saved `/ai/settings` row if one exists, else the server's env defaults
+(`TIMEBOX_LLM_PROVIDER_KIND`, `TIMEBOX_OLLAMA_BASE_URL`,
+`TIMEBOX_OLLAMA_MODEL`). `api_key` is write-only: it is encrypted at rest
+(same field crypto as event titles) and never appears in any response —
+only `has_api_key` does.
 
 | Route | Body → Response |
 |---|---|
-| `GET /ai/health` | — → `{ ok: boolean, model: string, base_url: string, detail: string|null }` (never 5xx: `ok:false` when Ollama is down) |
-| `POST /ai/timebox` | `{ task_title: string, estimated_minutes: number, window_start: iso, window_end: iso, notes?: string }` → `{ proposal: { start_at: iso, end_at: iso, rationale: string }, ai_session_id: string }` · 400 generic on sanitiser rejection · 503 `{detail}` when Ollama unreachable |
+| `GET /ai/settings` | — → `{ provider_kind: llm_provider_kind, base_url: string, model: string, has_api_key: boolean }` |
+| `PUT /ai/settings` | `{ provider_kind: llm_provider_kind, base_url: string, model: string, api_key?: string }` → same shape as `GET`. `api_key` omitted = leave unchanged, `""` = clear, non-empty = replace |
+| `GET /ai/health` | — → `{ ok: boolean, model: string, base_url: string, detail: string|null }` (never 5xx: `ok:false` when the provider is down) |
+| `POST /ai/timebox` | `{ task_title: string, estimated_minutes: number, window_start: iso, window_end: iso, notes?: string }` → `{ proposal: { start_at: iso, end_at: iso, rationale: string }, ai_session_id: string }` · 400 generic on sanitiser rejection · 503 `{detail}` when the provider is unreachable |
 
 ## Health
 

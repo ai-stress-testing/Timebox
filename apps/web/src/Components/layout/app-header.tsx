@@ -1,4 +1,3 @@
-import { use_lock } from "../../Hooks/use-vault";
 import { use_ui_store } from "../../Store/ui-store";
 import type { PageKey } from "../../Store/ui-store";
 import { Button } from "../ui/button";
@@ -8,6 +7,9 @@ const nav_items: ReadonlyArray<{ key: PageKey; label: string }> = [
   { key: "calendar", label: "Calendar" },
   { key: "chores", label: "Chores" },
   { key: "focus", label: "Focus" },
+  { key: "todo", label: "To do" },
+  { key: "routines", label: "Routines" },
+  { key: "canvas", label: "Canvas" },
 ];
 
 function NavTabs() {
@@ -39,7 +41,8 @@ function NavTabs() {
 
 export function AppHeader() {
   const open_ai_drawer = use_ui_store((state) => state.open_ai_drawer);
-  const lock = use_lock();
+  const page = use_ui_store((state) => state.page);
+  const set_page = use_ui_store((state) => state.set_page);
   return (
     <header
       className="sticky top-0 z-40 flex h-(--tb-header-height) items-center
@@ -58,8 +61,13 @@ export function AppHeader() {
         <Button variant="primary" onClick={open_ai_drawer}>
           ✦ AI timebox
         </Button>
-        <Button variant="subtle" onClick={() => lock.mutate()} aria-label="Lock the vault">
-          Lock
+        <Button
+          variant="subtle"
+          onClick={() => set_page("settings")}
+          aria-label="AI provider settings"
+          aria-current={page === "settings" ? "page" : undefined}
+        >
+          ⚙
         </Button>
       </div>
     </header>

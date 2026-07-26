@@ -4,9 +4,9 @@ type DotState = "ok" | "down" | "unknown";
 
 /* health state -> dot classes + label (dispatch map) */
 const dot_specs: Record<DotState, { classes: string; label: string }> = {
-  ok: { classes: "bg-ok shadow-glow-soft", label: "Ollama connected" },
-  down: { classes: "bg-danger", label: "Ollama unreachable" },
-  unknown: { classes: "bg-low", label: "Checking Ollama…" },
+  ok: { classes: "bg-ok shadow-glow-soft", label: "AI provider connected" },
+  down: { classes: "bg-danger", label: "AI provider unreachable" },
+  unknown: { classes: "bg-low", label: "Checking AI provider…" },
 };
 
 function to_dot_state(ok: boolean | undefined): DotState {

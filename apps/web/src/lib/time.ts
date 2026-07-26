@@ -1,5 +1,7 @@
 /* Date/time helpers. The API speaks ISO-8601 UTC with a Z suffix. */
 
+import { date_ymd_pattern, time_hhmm_pattern } from "./patterns";
+
 export const day_start_hour = 6;
 export const day_end_hour = 24;
 export const visible_hours = day_end_hour - day_start_hour;
@@ -61,8 +63,15 @@ export function slot_start(day: Date, hour: number): Date {
 
 /* ------------------------------------------------------------ formatting */
 
+function format_am_pm(hour: number, minute: number, omit_zero_minutes: boolean): string {
+  const period = hour < 12 ? "AM" : "PM";
+  const twelve_hour = hour % 12 === 0 ? 12 : hour % 12;
+  const minute_part = omit_zero_minutes && minute === 0 ? "" : `:${pad2(minute)}`;
+  return `${twelve_hour}${minute_part} ${period}`;
+}
+
 export function format_hour_label(hour: number): string {
-  return `${pad2(hour % 24)}:00`;
+  return format_am_pm(hour % 24, 0, true);
 }
 
 export function format_day_label(day: Date): string {
@@ -85,7 +94,7 @@ export function format_week_title(range: WeekRange): string {
 
 export function format_time(iso: string): string {
   const date = new Date(iso);
-  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  return format_am_pm(date.getHours(), date.getMinutes(), false);
 }
 
 export function format_time_range(start_iso: string, end_iso: string): string {
@@ -115,6 +124,40 @@ export function iso_to_local_input(iso: string): string {
 export function local_input_to_iso(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+/* --------------------------------------------- <input type=date / time> */
+
+/** "YYYY-MM-DD" (local wall-clock date) for an ISO instant. */
+export function date_input_value(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+/** "HH:MM" (local wall-clock time) for an ISO instant. */
+export function time_input_value(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+/** Combine a "YYYY-MM-DD" date and "HH:MM" time (local) into an ISO instant. */
+export function compose_local_iso(date_str: string, time_str: string): string {
+  if (!date_ymd_pattern.test(date_str) || !time_hhmm_pattern.test(time_str)) {
+    return "";
+  }
+  const date = new Date(`${date_str}T${time_str}`);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+/** ISO instant for local midnight of the day AFTER "YYYY-MM-DD". */
+export function next_day_midnight_iso(date_str: string): string {
+  if (!date_ymd_pattern.test(date_str)) return "";
+  const date = new Date(`${date_str}T00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + 1);
+  return date.toISOString();
 }
 
 export function next_full_hour(from: Date): Date {
@@ -147,4 +190,13 @@ export function event_day_layout(
   const top_pct = ((start - window_start) / window_span) * 100;
   const height_pct = Math.max(((end - start) / window_span) * 100, 1.5);
   return { top_pct, height_pct };
+}
+
+/** Vertical position (top %) of `now` inside `day`'s visible window; null when out of range. */
+export function now_top_pct(now: Date, day: Date): number | null {
+  const window_start = slot_start(day, day_start_hour).getTime();
+  const window_end = window_start + visible_hours * (ms_per_day / 24);
+  const point = now.getTime();
+  if (point < window_start || point > window_end) return null;
+  return ((point - window_start) / (window_end - window_start)) * 100;
 }

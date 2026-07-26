@@ -81,3 +81,71 @@ async def test_only_prompt_hash_persisted(unlocked, stub_provider) -> None:
     assert len(prompt_hash) == 64
     assert "design doc" not in prompt_hash
     assert model == "stub-model"
+
+
+async def test_llm_settings_roundtrip_never_leaks_api_key(unlocked, stub_provider) -> None:
+    client, _keyfile, headers = unlocked
+    put_body = {
+        "provider_kind": "openai_compat",
+        "base_url": "http://127.0.0.1:9",
+        "model": "local-model",
+        "api_key": "super-secret-key",
+    }
+    put_res = await client.put("/ai/settings", json=put_body, headers=headers)
+    assert put_res.status_code == 200, put_res.text
+    put_json = put_res.json()
+    assert put_json["provider_kind"] == "openai_compat"
+    assert put_json["has_api_key"] is True
+    assert "api_key" not in put_json
+
+    get_res = await client.get("/ai/settings", headers=headers)
+    assert get_res.status_code == 200
+    get_json = get_res.json()
+    assert get_json["has_api_key"] is True
+    assert get_json["base_url"] == "http://127.0.0.1:9"
+    assert "api_key" not in get_json
+
+    db_path = settings.database_url.rsplit("///", 1)[-1]
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("SELECT api_key_enc FROM llm_settings")
+        (api_key_enc,) = await cursor.fetchone()
+    assert api_key_enc is not None
+    assert "super-secret-key" not in api_key_enc
+
+    # /ai/health now resolves the openai_compat provider (not the stub the app
+    # default points at) and its unreachable-endpoint message proves dispatch
+    # picked the openai-compat provider, not ollama.
+    health_res = await client.get("/ai/health", headers=headers)
+    assert health_res.status_code == 200
+    health_json = health_res.json()
+    assert health_json["ok"] is False
+    assert health_json["model"] == "local-model"
+    assert "openai-compat" in health_json["detail"]
+
+
+async def test_llm_settings_empty_api_key_clears_it(unlocked, stub_provider) -> None:
+    client, _keyfile, headers = unlocked
+    first = await client.put(
+        "/ai/settings",
+        json={
+            "provider_kind": "ollama",
+            "base_url": "http://localhost:11434",
+            "model": "llama3.2",
+            "api_key": "will-be-cleared",
+        },
+        headers=headers,
+    )
+    assert first.json()["has_api_key"] is True
+
+    second = await client.put(
+        "/ai/settings",
+        json={
+            "provider_kind": "ollama",
+            "base_url": "http://localhost:11434",
+            "model": "llama3.2",
+            "api_key": "",
+        },
+        headers=headers,
+    )
+    assert second.status_code == 200
+    assert second.json()["has_api_key"] is False

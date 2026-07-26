@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api_request, api_request_empty } from "../Services/api-client";
-import { event_list_schema, event_schema } from "../lib/api-schemas";
+import {
+  event_list_schema,
+  event_schema,
+  event_split_response_schema,
+  event_title_suggestion_list_schema,
+} from "../lib/api-schemas";
 import type { EventCreate, EventPatch } from "../lib/api-schemas";
 
 const events_key = ["events"] as const;
@@ -10,6 +15,14 @@ export function use_events_range(start_iso: string, end_iso: string) {
   return useQuery({
     queryKey: [...events_key, start_iso, end_iso],
     queryFn: () => api_request(`/events?${search}`, event_list_schema),
+  });
+}
+
+export function use_event_titles() {
+  return useQuery({
+    queryKey: [...events_key, "titles"],
+    queryFn: () => api_request("/events/titles", event_title_suggestion_list_schema),
+    staleTime: 60_000,
   });
 }
 
@@ -39,11 +52,37 @@ export function use_update_event() {
   });
 }
 
+export function use_split_event() {
+  const invalidate = use_events_invalidation();
+  return useMutation({
+    mutationFn: (input: { id: string; split_at: string }) =>
+      api_request(`/events/${input.id}/split`, event_split_response_schema, {
+        method: "POST",
+        body: { split_at: input.split_at },
+      }),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export type DeleteScope = "all" | "occurrence" | "following";
+export type DeleteEventInput = {
+  id: string;
+  scope?: DeleteScope;
+  occurrence_date?: string | null;
+};
+
+function delete_event_path({ id, scope = "all", occurrence_date }: DeleteEventInput): string {
+  if (scope === "all") return `/events/${id}`;
+  const search = new URLSearchParams({ scope });
+  if (occurrence_date) search.set("occurrence_date", occurrence_date);
+  return `/events/${id}?${search}`;
+}
+
 export function use_delete_event() {
   const invalidate = use_events_invalidation();
   return useMutation({
-    mutationFn: (id: string) =>
-      api_request_empty(`/events/${id}`, { method: "DELETE" }),
+    mutationFn: (input: DeleteEventInput) =>
+      api_request_empty(delete_event_path(input), { method: "DELETE" }),
     onSuccess: () => invalidate(),
   });
 }

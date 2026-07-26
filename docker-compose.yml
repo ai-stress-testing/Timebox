@@ -1,0 +1,37 @@
+# Timebox — one command to reach a host Ollama, or an optional Ollama
+# sidecar for a fully self-contained stack.
+#
+#   Host Ollama (default):     docker compose up --build
+#   Bundled Ollama sidecar:    TIMEBOX_OLLAMA_BASE_URL=http://ollama:11434 \
+#                               docker compose --profile with-ollama up --build
+
+services:
+  timebox:
+    build:
+      context: .
+      args:
+        # Override behind a registry mirror (mirrors the Dockerfile's own ARGs).
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-alpine}
+    ports:
+      - "8787:8787"
+    environment:
+      TIMEBOX_OLLAMA_BASE_URL: ${TIMEBOX_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      TIMEBOX_OLLAMA_MODEL: ${TIMEBOX_OLLAMA_MODEL:-llama3.2}
+    extra_hosts:
+      # Makes host.docker.internal resolve on Linux too (Docker Desktop
+      # already provides it on macOS/Windows — this is a harmless no-op there).
+      - "host.docker.internal:host-gateway"
+
+  # Only started with `--profile with-ollama`: a self-contained Ollama
+  # instance on the compose network, addressable as `ollama` from timebox.
+  ollama:
+    image: ollama/ollama
+    profiles: ["with-ollama"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+
+volumes:
+  ollama-models:
