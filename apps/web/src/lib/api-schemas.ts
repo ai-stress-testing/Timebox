@@ -372,6 +372,34 @@ export const todo_schedule_response_schema = z.object({
 });
 export type TodoScheduleResponse = z.infer<typeof todo_schedule_response_schema>;
 
+/* ---- spec 015: batch schedule ---- */
+
+export const batch_schedule_item_schema = z.object({
+  todo_id: z.string().min(1),
+  start_at: z.string().min(1, "Start time is required"),
+  event_type: z.string().min(1, "Type is required"),
+  attention_class: attention_class_schema.optional(),
+});
+export type BatchScheduleItem = z.infer<typeof batch_schedule_item_schema>;
+
+export const batch_schedule_request_schema = z.object({
+  items: z.array(batch_schedule_item_schema).min(1, "Nothing to schedule"),
+});
+export type BatchScheduleRequest = z.infer<typeof batch_schedule_request_schema>;
+
+export const batch_schedule_result_schema = z.object({
+  todo_id: z.string(),
+  ok: z.boolean(),
+  event: event_schema.nullish(),
+  detail: z.string().nullish(),
+});
+export type BatchScheduleResult = z.infer<typeof batch_schedule_result_schema>;
+
+export const batch_schedule_response_schema = z.object({
+  results: z.array(batch_schedule_result_schema),
+});
+export type BatchScheduleResponse = z.infer<typeof batch_schedule_response_schema>;
+
 /* ------------------------------------------------------------- pomodoro */
 
 export const pomodoro_start_schema = z.object({

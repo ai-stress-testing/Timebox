@@ -160,6 +160,25 @@ export function next_day_midnight_iso(date_str: string): string {
   return date.toISOString();
 }
 
+export type HalfHourSlot = { hour: number; minute: number };
+
+/** Every half-hour mark from `day_start_hour` to `day_end_hour` — the batch
+ * scheduler's single-day grid (spec 015). `day_end_hour` (24) is exclusive,
+ * matching `visible_hours` above. */
+export function half_hour_slots(): HalfHourSlot[] {
+  const slots: HalfHourSlot[] = [];
+  for (let hour = day_start_hour; hour < day_end_hour; hour += 1) {
+    slots.push({ hour, minute: 0 });
+    slots.push({ hour, minute: 30 });
+  }
+  return slots;
+}
+
+/** "H:MM AM/PM" label for a half-hour slot, e.g. {hour:14,minute:30} -> "2:30 PM". */
+export function format_half_hour_label(slot: HalfHourSlot): string {
+  return format_am_pm(slot.hour % 24, slot.minute, false);
+}
+
 export function next_full_hour(from: Date): Date {
   const result = new Date(from);
   result.setMinutes(0, 0, 0);

@@ -7,7 +7,7 @@ since event types are per-user.
 """
 from pydantic import Field, model_validator
 
-from app.Schemas.base import ApiModel, AttentionClassField, UtcDateTime
+from app.Schemas.base import ApiModel, AttentionClass, AttentionClassField, UtcDateTime
 from app.Schemas.event import EventOut
 
 
@@ -48,3 +48,28 @@ class TodoScheduleRequest(ApiModel):
 class TodoScheduleResponse(ApiModel):
     todo: TodoOut
     event: EventOut
+
+
+class BatchScheduleItem(ApiModel):
+    """One assignment within a batch — `attention_class` defaults silently to
+    `active` (spec 015 reconciliation: no per-task attention selector in v1).
+    """
+    todo_id: str
+    start_at: UtcDateTime
+    event_type: str = Field(min_length=1, max_length=80)
+    attention_class: AttentionClassField = AttentionClass.active
+
+
+class BatchScheduleRequest(ApiModel):
+    items: list[BatchScheduleItem] = Field(min_length=1)
+
+
+class BatchScheduleResult(ApiModel):
+    todo_id: str
+    ok: bool
+    event: EventOut | None = None
+    detail: str | None = None
+
+
+class BatchScheduleResponse(ApiModel):
+    results: list[BatchScheduleResult]

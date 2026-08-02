@@ -63,6 +63,7 @@
   --animate-drawer-in: tb-drawer-in var(--tb-dur-base) var(--tb-ease-spring);
   --animate-pop-in: tb-pop-in var(--tb-dur-base) var(--tb-ease-spring);
   --animate-fade-in: tb-fade-in var(--tb-dur-base) var(--tb-ease-out);
+  --animate-shake: tb-shake 300ms var(--tb-ease-out);
 
   @keyframes tb-drawer-in {
     from {
@@ -90,6 +91,24 @@
     }
     to {
       opacity: 1;
+    }
+  }
+  @keyframes tb-shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20% {
+      transform: translateX(-4%);
+    }
+    40% {
+      transform: translateX(4%);
+    }
+    60% {
+      transform: translateX(-3%);
+    }
+    80% {
+      transform: translateX(3%);
     }
   }
 }
