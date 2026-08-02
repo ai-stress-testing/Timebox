@@ -4,7 +4,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.Core.database import get_session
 from app.Routers.deps import SessionContext, get_session_context
-from app.Schemas.todo import TodoCreate, TodoOut, TodoPatch, TodoScheduleRequest, TodoScheduleResponse
+from app.Schemas.todo import (
+    BatchScheduleRequest,
+    BatchScheduleResponse,
+    TodoCreate,
+    TodoOut,
+    TodoPatch,
+    TodoScheduleRequest,
+    TodoScheduleResponse,
+)
 from app.Services import todo_service
 
 router = APIRouter(prefix="/todos", tags=["todos"])
@@ -16,6 +24,19 @@ async def list_todos(
     db: AsyncSession = Depends(get_session),
 ) -> list[TodoOut]:
     return await todo_service.list_todos(db, ctx.user_id, ctx.data_key)
+
+
+# Declared before /{todo_id}-shaped routes so "batch-schedule" is never
+# captured as a todo id (same convention as events' "/titles", see
+# Routers/events.py) — POST here vs. PATCH /{todo_id} can't actually collide
+# on method, but keeping static-before-dynamic ordering regardless.
+@router.post("/batch-schedule", response_model=BatchScheduleResponse)
+async def batch_schedule_todos(
+    payload: BatchScheduleRequest,
+    ctx: SessionContext = Depends(get_session_context),
+    db: AsyncSession = Depends(get_session),
+) -> BatchScheduleResponse:
+    return await todo_service.batch_schedule(db, ctx.user_id, ctx.data_key, payload)
 
 
 @router.post("", response_model=TodoOut, status_code=201)

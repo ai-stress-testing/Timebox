@@ -1,11 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api_request, api_request_empty } from "../Services/api-client";
 import {
+  batch_schedule_response_schema,
   todo_list_schema,
   todo_schedule_response_schema,
   todo_schema,
 } from "../lib/api-schemas";
-import type { TodoCreate, TodoPatch, TodoScheduleRequest } from "../lib/api-schemas";
+import type {
+  BatchScheduleRequest,
+  TodoCreate,
+  TodoPatch,
+  TodoScheduleRequest,
+} from "../lib/api-schemas";
 
 const todos_key = ["todos"] as const;
 const events_key = ["events"] as const;
@@ -61,6 +67,24 @@ export function use_schedule_todo() {
       api_request(`/todos/${input.id}/schedule`, todo_schedule_response_schema, {
         method: "POST",
         body: input.payload,
+      }),
+    onSuccess: () => {
+      void query_client.invalidateQueries({ queryKey: todos_key });
+      void query_client.invalidateQueries({ queryKey: events_key });
+    },
+  });
+}
+
+/** The batch funnel action (spec 015): schedules many todos in one request.
+ * Same invalidation shape as `use_schedule_todo` — both the todos list
+ * (is_done flips server-side) and the events cache pick up the change. */
+export function use_batch_schedule() {
+  const query_client = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: BatchScheduleRequest) =>
+      api_request("/todos/batch-schedule", batch_schedule_response_schema, {
+        method: "POST",
+        body: payload,
       }),
     onSuccess: () => {
       void query_client.invalidateQueries({ queryKey: todos_key });

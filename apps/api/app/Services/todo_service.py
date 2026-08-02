@@ -4,6 +4,8 @@
 event-creation logic (canvas-type assignment, encryption, calendar
 resolution all stay in one place).
 """
+from datetime import timedelta
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.Core import crypto
@@ -12,8 +14,22 @@ from app.Models.todo import Todo
 from app.Repositories import todo_repo
 from app.Schemas.base import AttentionClass
 from app.Schemas.event import EventCreate
-from app.Schemas.todo import TodoCreate, TodoOut, TodoPatch, TodoScheduleRequest, TodoScheduleResponse
+from app.Schemas.todo import (
+    BatchScheduleItem,
+    BatchScheduleRequest,
+    BatchScheduleResponse,
+    BatchScheduleResult,
+    TodoCreate,
+    TodoOut,
+    TodoPatch,
+    TodoScheduleRequest,
+    TodoScheduleResponse,
+)
 from app.Services import event_service
+
+# Same fallback duration ScheduleTodoForm uses on the frontend when a todo
+# has no estimated_minutes of its own.
+_DEFAULT_DURATION_MINUTES = 30
 
 
 class TodoError(Exception):
@@ -106,3 +122,36 @@ async def schedule_todo(
     todo.is_done = True
     await session.commit()
     return TodoScheduleResponse(todo=_to_out(todo, data_key), event=created_event)
+
+
+async def _schedule_one(
+    session: AsyncSession, user_id: str, data_key: bytes, item: BatchScheduleItem
+) -> BatchScheduleResult:
+    todo = await todo_repo.get_todo(session, user_id, item.todo_id)
+    if todo is None:
+        return BatchScheduleResult(todo_id=item.todo_id, ok=False, detail="todo not found")
+
+    duration = todo.estimated_minutes or _DEFAULT_DURATION_MINUTES
+    end_at = item.start_at + timedelta(minutes=duration)
+    payload = TodoScheduleRequest(
+        start_at=item.start_at,
+        end_at=end_at,
+        event_type=item.event_type,
+        attention_class=item.attention_class,
+    )
+    try:
+        response = await schedule_todo(session, user_id, data_key, item.todo_id, payload)
+    except TodoError as exc:
+        return BatchScheduleResult(todo_id=item.todo_id, ok=False, detail=exc.detail)
+    return BatchScheduleResult(todo_id=item.todo_id, ok=True, event=response.event)
+
+
+async def batch_schedule(
+    session: AsyncSession, user_id: str, data_key: bytes, payload: BatchScheduleRequest
+) -> BatchScheduleResponse:
+    """Schedule many todos in one request via the existing single-item
+    `schedule_todo` funnel — one call per item, each independently committed
+    (or caught) so a failure on one item never rolls back the others.
+    """
+    results = [await _schedule_one(session, user_id, data_key, item) for item in payload.items]
+    return BatchScheduleResponse(results=results)

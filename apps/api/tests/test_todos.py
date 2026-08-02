@@ -137,3 +137,106 @@ async def test_schedule_end_before_start_rejected(unlocked) -> None:
         headers=headers,
     )
     assert bad.status_code == 422
+
+
+async def test_batch_schedule_all_succeed(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    todos = []
+    for title in ["Buy groceries", "Walk the dog", "Read a book"]:
+        created = await client.post("/todos", json=_todo_payload(title=title), headers=headers)
+        todos.append(created.json())
+
+    items = [
+        {
+            "todo_id": todos[0]["id"],
+            "start_at": "2026-07-14T09:00:00Z",
+            "event_type": "task",
+        },
+        {
+            "todo_id": todos[1]["id"],
+            "start_at": "2026-07-14T10:00:00Z",
+            "event_type": "task",
+        },
+        {
+            "todo_id": todos[2]["id"],
+            "start_at": "2026-07-14T11:00:00Z",
+            "event_type": "task",
+        },
+    ]
+    batch = await client.post("/todos/batch-schedule", json={"items": items}, headers=headers)
+    assert batch.status_code == 200, batch.text
+    results = batch.json()["results"]
+    assert len(results) == 3
+    assert all(r["ok"] for r in results)
+    assert all(r["event"] is not None for r in results)
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    assert len(listed.json()) == 3
+
+    open_todos = await client.get("/todos", headers=headers)
+    assert open_todos.json() == []
+
+
+async def test_batch_schedule_one_failure_others_still_commit(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    todos = []
+    for title in ["Buy groceries", "Walk the dog"]:
+        created = await client.post("/todos", json=_todo_payload(title=title), headers=headers)
+        todos.append(created.json())
+
+    # Schedule the same todo twice in one batch: the second occurrence must
+    # fail (already scheduled by the first) while the other todo still
+    # succeeds and commits.
+    items = [
+        {
+            "todo_id": todos[0]["id"],
+            "start_at": "2026-07-14T09:00:00Z",
+            "event_type": "task",
+        },
+        {
+            "todo_id": todos[1]["id"],
+            "start_at": "2026-07-14T10:00:00Z",
+            "event_type": "task",
+        },
+        {
+            "todo_id": todos[0]["id"],
+            "start_at": "2026-07-14T13:00:00Z",
+            "event_type": "task",
+        },
+    ]
+    batch = await client.post("/todos/batch-schedule", json={"items": items}, headers=headers)
+    assert batch.status_code == 200, batch.text
+    results = batch.json()["results"]
+    assert len(results) == 3
+    assert results[0]["ok"] is True
+    assert results[1]["ok"] is True
+    assert results[2]["ok"] is False
+    assert results[2]["detail"] is not None
+
+    listed = await client.get("/events", params=_WEEK, headers=headers)
+    assert len(listed.json()) == 2
+
+
+async def test_batch_schedule_empty_items_rejected(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    batch = await client.post("/todos/batch-schedule", json={"items": []}, headers=headers)
+    assert batch.status_code == 422
+
+
+async def test_batch_schedule_attention_class_defaults_to_active(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    created = await client.post("/todos", json=_todo_payload(), headers=headers)
+    todo_id = created.json()["id"]
+
+    items = [
+        {
+            "todo_id": todo_id,
+            "start_at": "2026-07-14T09:00:00Z",
+            "event_type": "task",
+        }
+    ]
+    batch = await client.post("/todos/batch-schedule", json={"items": items}, headers=headers)
+    assert batch.status_code == 200, batch.text
+    result = batch.json()["results"][0]
+    assert result["ok"] is True
+    assert result["event"]["attention_class"] == "active"
