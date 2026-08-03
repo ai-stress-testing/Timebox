@@ -1,5 +1,6 @@
 import type { Chore } from "../../lib/api-schemas";
 import { attention_class_labels } from "../../lib/dispatch-maps/labels";
+import { format_day_and_time } from "../../lib/time";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Slider } from "../ui/slider";
@@ -22,6 +23,11 @@ function due_label(days_until_due: number | null): string | null {
   return `due in ${days_until_due}d`;
 }
 
+function healing_label(chore: Chore): string | null {
+  if (chore.last_healing_reason === null || chore.last_healing_at === null) return null;
+  return `cadence relaxed ${format_day_and_time(chore.last_healing_at)}`;
+}
+
 function ChoreRow({ chore, on_delete, on_commit_n_current, on_complete, busy }: {
   chore: Chore;
   on_delete: (id: string) => void;
@@ -33,6 +39,7 @@ function ChoreRow({ chore, on_delete, on_commit_n_current, on_complete, busy }: 
   const n_max = chore.n_max ?? FALLBACK_N_MAX;
   const slider_default = chore.recommended_n ?? chore.n_current;
   const due = due_label(chore.days_until_due);
+  const healed = healing_label(chore);
 
   return (
     <li
@@ -49,6 +56,11 @@ function ChoreRow({ chore, on_delete, on_commit_n_current, on_complete, busy }: 
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Badge>{attention_class_labels[chore.attention_class]}</Badge>
+          {healed ? (
+            <Badge title="This chore's schedule was auto-relaxed because it was frequently missed">
+              {healed}
+            </Badge>
+          ) : null}
           <Button
             variant="ghost"
             disabled={busy}

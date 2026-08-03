@@ -3,6 +3,7 @@ import {
   attention_class_options,
 } from "../../lib/dispatch-maps/labels";
 import type { EventTitleSuggestion, EventTypeCreate, EventTypeSummary } from "../../lib/api-schemas";
+import { use_duration_profile_lookup } from "../../Hooks/use-duration-profiles";
 import { CheckboxField, SelectField, TextAreaField, TextField } from "../ui/field";
 import type { EventDraft } from "./event-draft";
 import { EventTypeField } from "./event-type-field";
@@ -34,6 +35,7 @@ function title_change_patch(
 }
 
 function TitleRow({ draft, errors, on_change, title_suggestions = [] }: FieldsProps) {
+  const { data: duration_profile } = use_duration_profile_lookup(draft.title);
   return (
     <>
       <TextField
@@ -47,6 +49,12 @@ function TitleRow({ draft, errors, on_change, title_suggestions = [] }: FieldsPr
           on_change(title_change_patch(event.target.value, draft, title_suggestions))
         }
       />
+      {duration_profile && duration_profile.total_sample_count > 0 ? (
+        <p className="text-xs text-mid">
+          Usually takes ~{Math.round(duration_profile.total_mean)} min (from{" "}
+          {duration_profile.total_sample_count} past completions)
+        </p>
+      ) : null}
       <datalist id={title_datalist_id}>
         {title_suggestions.map((suggestion) => (
           <option key={suggestion.title} value={suggestion.title} />
