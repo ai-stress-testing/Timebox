@@ -8,7 +8,7 @@ from app.Core import crypto
 from app.Models.base import utc_now
 from app.Models.chore import ChoreDefinition
 from app.Pipelines.chore_entropy import days_until_due as compute_days_until_due
-from app.Repositories import chore_entropy_repo, chore_repo
+from app.Repositories import chore_entropy_repo, chore_healing_repo, chore_repo
 from app.Schemas.base import AttentionClass, CalendarColor
 from app.Schemas.chore import ChoreCreate, ChoreOut, ChorePatch
 
@@ -24,6 +24,7 @@ async def to_out(session: AsyncSession, chore: ChoreDefinition, data_key: bytes)
     color = CalendarColor(chore.color) if chore.color else None
     entropy = await chore_entropy_repo.get_entropy(session, chore.id)
     recommended_n = entropy.recommended_n if entropy else None
+    last_healing = await chore_healing_repo.get_latest_healing(session, chore.id)
     return ChoreOut(
         id=chore.id,
         name=crypto.decrypt_field(data_key, chore.name_enc),
@@ -45,6 +46,8 @@ async def to_out(session: AsyncSession, chore: ChoreDefinition, data_key: bytes)
         next_due_at=chore.next_due_at,
         days_until_due=compute_days_until_due(chore.next_due_at, utc_now()),
         recommended_n=recommended_n,
+        last_healing_reason=last_healing.reason if last_healing else None,
+        last_healing_at=last_healing.recorded_at if last_healing else None,
         created_at=chore.created_at,
         updated_at=chore.updated_at,
     )

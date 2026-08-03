@@ -8,7 +8,6 @@ from app.dispatch_maps.break_rules import get_break_minutes
 from app.Models.base import utc_now
 from app.Models.pomodoro import PomodoroSession, ResidualPrompt, TaskResidual
 from app.Repositories import event_repo, pomodoro_repo
-from app.Schemas.base import AttentionClass
 from app.Schemas.pomodoro import (
     FinishResponse,
     PromptOut,
@@ -21,6 +20,7 @@ from app.Schemas.pomodoro import (
     SessionOut,
     SessionStart,
 )
+from app.Services import attention_class_service
 
 _PROMPT_TIMEOUT_MINUTES = 60
 
@@ -78,7 +78,7 @@ async def start_session(
     event = await event_repo.get_event(session, user_id, payload.event_id)
     if event is None:
         raise PomodoroError(404, "event not found")
-    if event.attention_class != AttentionClass.active.value:
+    if not await attention_class_service.is_pomodoro_applicable(session, event.attention_class):
         raise PomodoroError(409, "pomodoro applies only to active-attention events")
     open_session = await pomodoro_repo.get_open_session(session, user_id)
     if open_session is not None:

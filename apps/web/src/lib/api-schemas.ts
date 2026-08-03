@@ -273,6 +273,8 @@ export const chore_schema = z.object({
   next_due_at: z.string().nullable(),
   days_until_due: z.number().nullable(),
   recommended_n: z.number().nullable(),
+  last_healing_reason: z.string().nullable(),
+  last_healing_at: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -756,3 +758,31 @@ export const canvas_alarm_patch_schema = z.object({
   snoozed_until: z.string().optional(),
 });
 export type CanvasAlarmPatch = z.infer<typeof canvas_alarm_patch_schema>;
+
+/* ---- spec 005: attention classes ---- */
+
+export const attention_class_meta_schema = z.object({
+  id: z.string(),
+  value: z.string(),
+  label: z.string(),
+  description: z.string(),
+  pomodoro_applicable: z.boolean(),
+  residual_applicable: z.boolean(),
+  delay_on_no_complete: z.boolean(),
+  default_r: z.number(),
+  default_alarm_class: z.string().nullable(),
+});
+export type AttentionClassMeta = z.infer<typeof attention_class_meta_schema>;
+
+export const attention_class_meta_list_schema = z.array(attention_class_meta_schema);
+
+/* ---- spec 007: duration profiles ---- */
+
+export const duration_profile_schema = z.object({
+  label_hash: z.string().nullable(),
+  chore_id: z.string().nullable(),
+  total_sample_count: z.number(),
+  total_mean: z.number(),
+  mc_weight: z.number(),
+});
+export type DurationProfile = z.infer<typeof duration_profile_schema>;

@@ -3,12 +3,6 @@ table as data. Never set by the user; recomputed on create/update.
 """
 from app.Schemas.base import AttentionClass, CanvasEventType
 
-ATTENTION_DEFAULTS: dict[AttentionClass, dict[str, object]] = {
-    AttentionClass.active: {"pomodoro": True, "residual": True, "default_r": 0.2},
-    AttentionClass.involved: {"pomodoro": False, "residual": False, "default_r": 0.3},
-    AttentionClass.passive: {"pomodoro": False, "residual": False, "default_r": 0.8},
-}
-
 OVERLAP_TYPE_MAP: dict[frozenset[AttentionClass], CanvasEventType] = {
     frozenset({AttentionClass.active}): CanvasEventType.focus_only,
     frozenset({AttentionClass.involved}): CanvasEventType.involved_only,

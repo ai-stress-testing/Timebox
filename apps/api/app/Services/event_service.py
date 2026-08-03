@@ -19,7 +19,7 @@ from app.Schemas.base import (
     EventStatus,
 )
 from app.Schemas.event import EventCreate, EventOut, EventPatch, EventTitleSuggestion
-from app.Services import event_type_service
+from app.Services import duration_profile_service, event_type_service
 from app.Services.calendar_service import ensure_default_calendar
 
 DeleteScope = Literal["all", "occurrence", "following"]
@@ -367,6 +367,14 @@ async def patch_event(
     await session.flush()
     await _reassign_canvas_types(session, event)
     await _reassign_range(session, user_id, old_start, old_end)
+    if payload.actual_minutes is not None:
+        # A logged actual duration is this codebase's definition of "done" for
+        # duration-learning purposes (spec 007) — record one sample against
+        # the event's (decrypted) title, independent of `status`.
+        title = crypto.decrypt_field(data_key, event.title_enc)
+        await duration_profile_service.record_event_completion(
+            session, user_id, title, event.attention_class, payload.actual_minutes
+        )
     await session.commit()
     return to_out(event, data_key)
 

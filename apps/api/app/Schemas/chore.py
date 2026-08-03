@@ -104,6 +104,8 @@ class ChoreOut(ApiModel):
     next_due_at: UtcDateTime | None
     days_until_due: int | None
     recommended_n: int | None
+    last_healing_reason: str | None
+    last_healing_at: UtcDateTime | None
     created_at: UtcDateTime
     updated_at: UtcDateTime
 

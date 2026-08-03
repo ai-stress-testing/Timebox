@@ -16,9 +16,11 @@ from app.Middleware.auth import SessionAuthMiddleware
 from app.Middleware.trace import TraceIdMiddleware
 from app.Routers import (
     ai,
+    attention_classes,
     calendars,
     canvas,
     chores,
+    duration_profiles,
     event_types,
     events,
     pomodoro,
@@ -27,6 +29,8 @@ from app.Routers import (
     todos,
     vault,
 )
+from app.Services import attention_class_service
+from app.Services.chore_missed_detection_service import run_missed_detection
 from app.Services.Llm.ollama import build_default_provider
 from app.Services.purge_service import run_purge
 
@@ -36,6 +40,7 @@ _DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 
 _PURGE_INTERVAL_SECONDS = 24 * 60 * 60
+_MISSED_DETECTION_INTERVAL_SECONDS = 60 * 60
 
 
 async def _purge_daily() -> None:
@@ -46,16 +51,31 @@ async def _purge_daily() -> None:
         await asyncio.sleep(_PURGE_INTERVAL_SECONDS)
 
 
+async def _missed_detection_hourly() -> None:
+    """Spec 008 part 1+2: transition passed-window occurrences, then heal
+    chronically-missed chores' cadence, once an hour."""
+    while True:
+        async with session_factory() as db:
+            await run_missed_detection(db)
+        await asyncio.sleep(_MISSED_DETECTION_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     await init_models()
+    async with session_factory() as db:
+        await attention_class_service.ensure_seeded(db)
     purge_task = asyncio.create_task(_purge_daily())
+    missed_detection_task = asyncio.create_task(_missed_detection_hourly())
     _log.info("timebox-api ready")
     yield
     purge_task.cancel()
+    missed_detection_task.cancel()
     with suppress(asyncio.CancelledError):
         await purge_task
+    with suppress(asyncio.CancelledError):
+        await missed_detection_task
     await app.state.llm_provider.close()
 
 
@@ -94,6 +114,8 @@ def create_app() -> FastAPI:
         routines.runs_router,
         canvas.router,
         ai.router,
+        attention_classes.router,
+        duration_profiles.router,
     ):
         app.include_router(router, prefix=settings.api_prefix)
 

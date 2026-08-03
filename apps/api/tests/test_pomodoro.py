@@ -103,3 +103,45 @@ async def test_pomodoro_rejected_for_passive_event(unlocked) -> None:
         headers=headers,
     )
     assert started.status_code == 409
+
+
+async def test_pomodoro_rejected_for_involved_event(unlocked) -> None:
+    client, _keyfile, headers = unlocked
+    res = await client.post(
+        "/events",
+        json={
+            "title": "Standup",
+            "event_type": "meeting",
+            "attention_class": "involved",
+            "start_at": "2026-07-14T09:00:00Z",
+            "end_at": "2026-07-14T10:00:00Z",
+        },
+        headers=headers,
+    )
+    started = await client.post(
+        "/pomodoro/sessions",
+        json={"event_id": res.json()["id"], "intended_minutes": 25},
+        headers=headers,
+    )
+    assert started.status_code == 409
+
+
+async def test_pomodoro_still_starts_for_active_event_after_attention_class_migration(
+    unlocked,
+) -> None:
+    """Regression for spec 005: `pomodoro_service.start_session` now gates on
+    `attention_class_service.is_pomodoro_applicable` (a table lookup) instead
+    of a literal `AttentionClass.active` equality check. Behavior for
+    existing data must be unchanged — an `active` event still starts and
+    gates a pomodoro session exactly as before.
+    """
+    client, _keyfile, headers = unlocked
+    event_id = await _create_active_event(client, headers)
+    started = await client.post(
+        "/pomodoro/sessions", json={"event_id": event_id, "intended_minutes": 25}, headers=headers
+    )
+    assert started.status_code == 201, started.text
+    assert started.json()["status"] == "active"
+
+    event = await client.get(f"/events/{event_id}", headers=headers)
+    assert event.json()["status"] == "in_progress"
