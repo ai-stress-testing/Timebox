@@ -34,9 +34,9 @@ type ScheduleRoutineFormProps = {
   busy: boolean;
 };
 
-/** Places a routine on the calendar as an estimate-sized block — same shape
- * as ScheduleTodoForm, but there's no end-time input: duration always comes
- * from the routine's derived `estimated_minutes`, never a client range. */
+/** Places a routine on the calendar as an estimate-sized block — no end-time
+ * input: duration always comes from the routine's derived
+ * `estimated_minutes`, never a client range. */
 export function ScheduleRoutineForm({
   routine,
   event_types,

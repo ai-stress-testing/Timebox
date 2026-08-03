@@ -73,70 +73,57 @@ async def test_titles_encrypted_at_rest(unlocked) -> None:
     assert stored.startswith("v1:")
 
 
-async def test_schedule_todo_creates_event_and_marks_done(unlocked) -> None:
+async def test_batch_schedule_single_item_creates_event_and_marks_done(unlocked) -> None:
+    """The one-todo case of the batch funnel — this is now the only path
+    (the old single-item POST /todos/{id}/schedule endpoint is gone;
+    batch-schedule, even with one item, is the sole scheduling entry point)."""
     client, _keyfile, headers = unlocked
     created = await client.post("/todos", json=_todo_payload(), headers=headers)
     todo = created.json()
 
     scheduled = await client.post(
-        f"/todos/{todo['id']}/schedule",
+        "/todos/batch-schedule",
         json={
-            "start_at": "2026-07-14T09:00:00Z",
-            "end_at": "2026-07-14T09:30:00Z",
-            "event_type": "task",
-            "attention_class": "active",
+            "items": [
+                {
+                    "todo_id": todo["id"],
+                    "start_at": "2026-07-14T09:00:00Z",
+                    "event_type": "task",
+                    "attention_class": "active",
+                }
+            ]
         },
         headers=headers,
     )
     assert scheduled.status_code == 200, scheduled.text
-    body = scheduled.json()
-    assert body["todo"]["is_done"] is True
-    assert body["todo"]["scheduled_event_id"] == body["event"]["id"]
-    assert body["event"]["title"] == "Buy groceries"
-    assert body["event"]["start_at"] == "2026-07-14T09:00:00Z"
-    assert body["event"]["estimated_minutes"] == 30
+    result = scheduled.json()["results"][0]
+    assert result["ok"] is True
+    assert result["event"]["title"] == "Buy groceries"
+    assert result["event"]["start_at"] == "2026-07-14T09:00:00Z"
+    assert result["event"]["estimated_minutes"] == 30
 
     # the event is visible via GET /events for the scheduled window
     listed = await client.get("/events", params=_WEEK, headers=headers)
-    assert [e["id"] for e in listed.json()] == [body["event"]["id"]]
+    assert [e["id"] for e in listed.json()] == [result["event"]["id"]]
 
     # scheduled todos drop out of the open list
     open_todos = await client.get("/todos", headers=headers)
     assert open_todos.json() == []
 
 
-async def test_schedule_already_scheduled_todo_rejected(unlocked) -> None:
+async def test_batch_schedule_already_scheduled_todo_rejected(unlocked) -> None:
     client, _keyfile, headers = unlocked
     created = await client.post("/todos", json=_todo_payload(), headers=headers)
     todo_id = created.json()["id"]
 
-    payload = {
-        "start_at": "2026-07-14T09:00:00Z",
-        "end_at": "2026-07-14T09:30:00Z",
-        "event_type": "task",
-    }
-    first = await client.post(f"/todos/{todo_id}/schedule", json=payload, headers=headers)
+    item = {"todo_id": todo_id, "start_at": "2026-07-14T09:00:00Z", "event_type": "task"}
+    first = await client.post("/todos/batch-schedule", json={"items": [item]}, headers=headers)
     assert first.status_code == 200, first.text
+    assert first.json()["results"][0]["ok"] is True
 
-    second = await client.post(f"/todos/{todo_id}/schedule", json=payload, headers=headers)
-    assert second.status_code == 409
-
-
-async def test_schedule_end_before_start_rejected(unlocked) -> None:
-    client, _keyfile, headers = unlocked
-    created = await client.post("/todos", json=_todo_payload(), headers=headers)
-    todo_id = created.json()["id"]
-
-    bad = await client.post(
-        f"/todos/{todo_id}/schedule",
-        json={
-            "start_at": "2026-07-14T09:30:00Z",
-            "end_at": "2026-07-14T09:00:00Z",
-            "event_type": "task",
-        },
-        headers=headers,
-    )
-    assert bad.status_code == 422
+    second = await client.post("/todos/batch-schedule", json={"items": [item]}, headers=headers)
+    assert second.status_code == 200, second.text
+    assert second.json()["results"][0]["ok"] is False
 
 
 async def test_batch_schedule_all_succeed(unlocked) -> None:

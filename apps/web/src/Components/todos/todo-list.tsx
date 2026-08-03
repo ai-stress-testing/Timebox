@@ -1,19 +1,9 @@
-import { useState } from "react";
-import type {
-  EventTypeCreate,
-  EventTypeSummary,
-  Todo,
-  TodoScheduleRequest,
-} from "../../lib/api-schemas";
+import type { Todo } from "../../lib/api-schemas";
 import { Button } from "../ui/button";
 import { CheckboxField } from "../ui/field";
-import { ScheduleTodoForm } from "./schedule-todo-form";
 
 type TodoListProps = {
   todos: Todo[];
-  event_types: EventTypeSummary[];
-  on_create_type: (payload: EventTypeCreate) => Promise<EventTypeSummary | null>;
-  on_schedule: (id: string, payload: TodoScheduleRequest) => void;
   on_mark_done: (id: string) => void;
   on_delete: (id: string) => void;
   busy: boolean;
@@ -27,19 +17,7 @@ type TodoRowProps = Omit<TodoListProps, "todos" | "selected_ids" | "on_open_batc
   selected: boolean;
 };
 
-function TodoRow({
-  todo,
-  event_types,
-  on_create_type,
-  on_schedule,
-  on_mark_done,
-  on_delete,
-  on_toggle_select,
-  busy,
-  selected,
-}: TodoRowProps) {
-  const [scheduling, set_scheduling] = useState(false);
-
+function TodoRow({ todo, on_mark_done, on_delete, on_toggle_select, busy, selected }: TodoRowProps) {
   return (
     <li className="flex flex-col gap-3 rounded-md border border-edge bg-surface-2 px-4 py-3
       transition-all duration-(--tb-dur-fast) hover:border-edge-strong">
@@ -66,13 +44,6 @@ function TodoRow({
             onChange={() => on_mark_done(todo.id)}
           />
           <Button
-            variant="subtle"
-            disabled={busy}
-            onClick={() => set_scheduling((current) => !current)}
-          >
-            {scheduling ? "Cancel" : "Schedule"}
-          </Button>
-          <Button
             variant="danger"
             disabled={busy}
             aria-label={`Delete to-do ${todo.title}`}
@@ -82,28 +53,12 @@ function TodoRow({
           </Button>
         </div>
       </div>
-      {scheduling ? (
-        <ScheduleTodoForm
-          todo={todo}
-          event_types={event_types}
-          on_create_type={on_create_type}
-          busy={busy}
-          on_cancel={() => set_scheduling(false)}
-          on_submit={(payload) => {
-            on_schedule(todo.id, payload);
-            set_scheduling(false);
-          }}
-        />
-      ) : null}
     </li>
   );
 }
 
 export function TodoList({
   todos,
-  event_types,
-  on_create_type,
-  on_schedule,
   on_mark_done,
   on_delete,
   busy,
@@ -121,7 +76,11 @@ export function TodoList({
           Batch schedule ({selected_count})
         </Button>
       </div>
-    ) : null;
+    ) : (
+      <p className="text-xs text-mid">
+        Select one or more to-dos, then Batch schedule to place them on the calendar.
+      </p>
+    );
 
   if (todos.length === 0) {
     return (
@@ -138,9 +97,6 @@ export function TodoList({
           <TodoRow
             key={todo.id}
             todo={todo}
-            event_types={event_types}
-            on_create_type={on_create_type}
-            on_schedule={on_schedule}
             on_mark_done={on_mark_done}
             on_delete={on_delete}
             on_toggle_select={on_toggle_select}

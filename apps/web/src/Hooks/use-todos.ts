@@ -3,15 +3,9 @@ import { api_request, api_request_empty } from "../Services/api-client";
 import {
   batch_schedule_response_schema,
   todo_list_schema,
-  todo_schedule_response_schema,
   todo_schema,
 } from "../lib/api-schemas";
-import type {
-  BatchScheduleRequest,
-  TodoCreate,
-  TodoPatch,
-  TodoScheduleRequest,
-} from "../lib/api-schemas";
+import type { BatchScheduleRequest, TodoCreate, TodoPatch } from "../lib/api-schemas";
 
 const todos_key = ["todos"] as const;
 const events_key = ["events"] as const;
@@ -57,27 +51,10 @@ export function use_delete_todo() {
   });
 }
 
-/** The funnel action: turns a todo into a scheduled Event. Invalidates both
- * the todos list (it flips is_done server-side) and the events cache (so the
- * calendar picks up the newly created event when the user switches to it). */
-export function use_schedule_todo() {
-  const query_client = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { id: string; payload: TodoScheduleRequest }) =>
-      api_request(`/todos/${input.id}/schedule`, todo_schedule_response_schema, {
-        method: "POST",
-        body: input.payload,
-      }),
-    onSuccess: () => {
-      void query_client.invalidateQueries({ queryKey: todos_key });
-      void query_client.invalidateQueries({ queryKey: events_key });
-    },
-  });
-}
-
-/** The batch funnel action (spec 015): schedules many todos in one request.
- * Same invalidation shape as `use_schedule_todo` — both the todos list
- * (is_done flips server-side) and the events cache pick up the change. */
+/** The funnel action (spec 015): schedules one or more todos in one request
+ * — batch-schedule is the sole scheduling entry point now, even for a single
+ * todo. Invalidates both the todos list (is_done flips server-side) and the
+ * events cache (so the calendar picks up the newly created event(s)). */
 export function use_batch_schedule() {
   const query_client = useQueryClient();
   return useMutation({

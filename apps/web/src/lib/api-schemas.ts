@@ -331,8 +331,8 @@ export const schedule_apply_schema = z.object({ events_created: z.number() });
 
 /* ----------------------------------------------------------------- todos */
 
-/** A lightweight to-do, separate from calendar events. `schedule_todo`
- * funnels one into an Event — see event_schema / TodoScheduleResponse. */
+/** A lightweight to-do, separate from calendar events. Batch-schedule
+ * funnels one or more into real Events — see event_schema / BatchScheduleResponse. */
 export const todo_schema = z.object({
   id: z.string(),
   title: z.string(),
@@ -352,25 +352,6 @@ export const todo_create_schema = z.object({
 export type TodoCreate = z.infer<typeof todo_create_schema>;
 
 export type TodoPatch = Partial<TodoCreate> & { is_done?: boolean };
-
-export const todo_schedule_request_schema = z
-  .object({
-    start_at: z.string().min(1, "Start time is required"),
-    end_at: z.string().min(1, "End time is required"),
-    event_type: z.string().min(1, "Type is required"),
-    attention_class: attention_class_schema.optional(),
-  })
-  .refine((value) => value.end_at > value.start_at, {
-    message: "End must be after start",
-    path: ["end_at"],
-  });
-export type TodoScheduleRequest = z.infer<typeof todo_schedule_request_schema>;
-
-export const todo_schedule_response_schema = z.object({
-  todo: todo_schema,
-  event: event_schema,
-});
-export type TodoScheduleResponse = z.infer<typeof todo_schedule_response_schema>;
 
 /* ---- spec 015: batch schedule ---- */
 

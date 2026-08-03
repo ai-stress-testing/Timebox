@@ -10,8 +10,6 @@ from app.Schemas.todo import (
     TodoCreate,
     TodoOut,
     TodoPatch,
-    TodoScheduleRequest,
-    TodoScheduleResponse,
 )
 from app.Services import todo_service
 
@@ -69,18 +67,5 @@ async def delete_todo(
 ) -> None:
     try:
         await todo_service.delete_todo(db, ctx.user_id, todo_id)
-    except todo_service.TodoError as exc:
-        raise HTTPException(exc.status_code, exc.detail) from exc
-
-
-@router.post("/{todo_id}/schedule", response_model=TodoScheduleResponse)
-async def schedule_todo(
-    todo_id: str,
-    payload: TodoScheduleRequest,
-    ctx: SessionContext = Depends(get_session_context),
-    db: AsyncSession = Depends(get_session),
-) -> TodoScheduleResponse:
-    try:
-        return await todo_service.schedule_todo(db, ctx.user_id, ctx.data_key, todo_id, payload)
     except todo_service.TodoError as exc:
         raise HTTPException(exc.status_code, exc.detail) from exc

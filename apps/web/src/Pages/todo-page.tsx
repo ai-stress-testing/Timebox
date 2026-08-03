@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { EventTypeCreate, EventTypeSummary, TodoScheduleRequest } from "../lib/api-schemas";
+import type { EventTypeCreate, EventTypeSummary } from "../lib/api-schemas";
 import { BatchScheduleModal } from "../Components/todos/batch-schedule-modal";
 import { TodoForm } from "../Components/todos/todo-form";
 import { TodoList } from "../Components/todos/todo-list";
@@ -7,7 +7,6 @@ import { use_create_event_type, use_event_types } from "../Hooks/use-event-types
 import {
   use_create_todo,
   use_delete_todo,
-  use_schedule_todo,
   use_todos,
   use_update_todo,
 } from "../Hooks/use-todos";
@@ -24,15 +23,13 @@ export function TodoPage() {
   const create = use_create_todo();
   const update = use_update_todo();
   const remove = use_delete_todo();
-  const schedule = use_schedule_todo();
   const types = use_event_types();
   const create_type = use_create_event_type();
 
   const [selected_ids, set_selected_ids] = useState<Set<string>>(new Set());
   const [batch_modal_open, set_batch_modal_open] = useState(false);
 
-  const busy =
-    create.isPending || update.isPending || remove.isPending || schedule.isPending;
+  const busy = create.isPending || update.isPending || remove.isPending;
 
   const handle_toggle_select = (id: string) => {
     set_selected_ids((current) => {
@@ -85,16 +82,6 @@ export function TodoPage() {
     });
   };
 
-  const handle_schedule = (id: string, payload: TodoScheduleRequest) => {
-    schedule.mutate(
-      { id, payload },
-      {
-        onSuccess: () => push_toast("Scheduled onto the calendar.", "ok"),
-        onError: (cause) => push_toast(to_error_message(cause), "danger"),
-      },
-    );
-  };
-
   const handle_create_type = async (
     payload: EventTypeCreate,
   ): Promise<EventTypeSummary | null> => {
@@ -116,9 +103,6 @@ export function TodoPage() {
       ) : null}
       <TodoList
         todos={todos.data ?? []}
-        event_types={active_types(types.data)}
-        on_create_type={handle_create_type}
-        on_schedule={handle_schedule}
         on_mark_done={handle_mark_done}
         on_delete={handle_delete}
         busy={busy}
