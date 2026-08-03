@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CanvasCreateBar } from "../Components/canvas/canvas-create-bar";
 import { CanvasItemEditCard } from "../Components/canvas/canvas-item-edit-card";
 import { RadialCanvas } from "../Components/canvas/radial-canvas";
+import { use_canvas_completion_alerts } from "../Hooks/use-canvas-completion-alerts";
 import {
   use_canvas_items,
   use_create_canvas_item,
@@ -14,6 +15,7 @@ import {
 import type { CanvasItem } from "../lib/api-schemas";
 import { to_error_message } from "../Services/api-client";
 import { push_toast } from "../Store/toast-store";
+import { unlock_audio } from "../lib/timer-notify";
 
 /* Not yet wired into app.tsx's page dispatch / ui-store's PageKey /
  * app-header's nav — see the build report. Fully functional standalone. */
@@ -28,6 +30,8 @@ export function CanvasPage() {
 
   const [selected_id, set_selected_id] = useState<string | null>(null);
   const selected: CanvasItem | undefined = (items.data ?? []).find((item) => item.id === selected_id);
+
+  use_canvas_completion_alerts(items.data ?? []);
 
   const busy =
     create.isPending ||
@@ -104,11 +108,15 @@ export function CanvasPage() {
           item={selected}
           on_close={() => set_selected_id(null)}
           on_save={handle_save}
-          on_start={() =>
+          on_start={() => {
+            // A real user gesture — unlocks the Web Audio chime ahead of
+            // time, since the completion alert itself fires with no fresh
+            // gesture behind it and autoplay policies would otherwise block it.
+            unlock_audio();
             start.mutate(selected.id, {
               onError: (cause) => push_toast(to_error_message(cause), "danger"),
-            })
-          }
+            });
+          }}
           on_pause={() =>
             pause.mutate(selected.id, {
               onError: (cause) => push_toast(to_error_message(cause), "danger"),

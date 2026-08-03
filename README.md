@@ -110,21 +110,30 @@ so two things must line up:
 
 **Recommended — `docker-compose.yml`** does both automatically (it sets the
 `host.docker.internal` mapping and points `TIMEBOX_OLLAMA_BASE_URL` at it for
-you, on Linux and Docker Desktop alike):
+you, on Linux and Docker Desktop alike) **and falls back automatically** to a
+bundled Ollama sidecar (`TIMEBOX_OLLAMA_FALLBACK_BASE_URL`, default
+`http://ollama:11434`) if the host one can't be reached — no env var to swap by
+hand, no restart:
 
 ```bash
 # Ollama already running on the host (see "Running Ollama" above)
 docker compose up --build
 
 # Fully self-contained instead — an Ollama sidecar on the compose network,
-# no host install needed:
+# no host install needed. One command; the app retries the sidecar
+# automatically the moment host.docker.internal is unreachable:
 docker compose --profile with-ollama up --build
 docker compose exec ollama ollama pull llama3.2
-TIMEBOX_OLLAMA_BASE_URL=http://ollama:11434 docker compose --profile with-ollama up --build
 ```
 
+If a host Ollama *is* reachable, it's still preferred — the sidecar is a
+fallback, not a mode switch, so nothing changes for people not using
+`--profile with-ollama` at all.
+
 The rest of this section is the equivalent by hand with plain `docker run`, for
-anyone not using Compose.
+anyone not using Compose (no automatic fallback there — pass one
+`TIMEBOX_OLLAMA_BASE_URL` and mean it, or add
+`-e TIMEBOX_OLLAMA_FALLBACK_BASE_URL=<url>` yourself).
 
 **macOS / Windows** (Docker Desktop resolves `host.docker.internal` for you):
 
