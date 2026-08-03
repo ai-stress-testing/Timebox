@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
     ollama_timeout_seconds: float = Field(default=120.0, le=120.0)
+    # Tried automatically, only if ollama_base_url is unreachable at the
+    # transport level (see Services/Llm/ollama.py) — the docker-compose
+    # `ollama` sidecar's compose-network address. Outside Docker this simply
+    # fails to resolve too and the original error surfaces unchanged.
+    ollama_fallback_base_url: str | None = "http://ollama:11434"
 
     session_ttl_hours: int = 12
     session_max_lifetime_hours: int = 24

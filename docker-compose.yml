@@ -1,9 +1,15 @@
-# Timebox — one command to reach a host Ollama, or an optional Ollama
-# sidecar for a fully self-contained stack.
+# Timebox — one command to reach a host Ollama, with an automatic fallback
+# to an optional bundled Ollama sidecar for a fully self-contained stack.
 #
 #   Host Ollama (default):     docker compose up --build
-#   Bundled Ollama sidecar:    TIMEBOX_OLLAMA_BASE_URL=http://ollama:11434 \
-#                               docker compose --profile with-ollama up --build
+#   Bundled Ollama sidecar:    docker compose --profile with-ollama up --build
+#
+# No env var swap needed for the sidecar case: the app tries
+# TIMEBOX_OLLAMA_BASE_URL (host.docker.internal) first and, only if that's
+# unreachable, automatically retries TIMEBOX_OLLAMA_FALLBACK_BASE_URL (the
+# sidecar's compose-network address) — see Services/Llm/ollama.py. Starting
+# `--profile with-ollama` alone is enough; if a host Ollama IS reachable it's
+# still preferred, since the sidecar is a fallback, not a mode switch.
 
 services:
   timebox:
@@ -17,6 +23,7 @@ services:
       - "8787:8787"
     environment:
       TIMEBOX_OLLAMA_BASE_URL: ${TIMEBOX_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      TIMEBOX_OLLAMA_FALLBACK_BASE_URL: ${TIMEBOX_OLLAMA_FALLBACK_BASE_URL:-http://ollama:11434}
       TIMEBOX_OLLAMA_MODEL: ${TIMEBOX_OLLAMA_MODEL:-llama3.2}
     extra_hosts:
       # Makes host.docker.internal resolve on Linux too (Docker Desktop
